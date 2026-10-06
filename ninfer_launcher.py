@@ -109,6 +109,11 @@ SAMPLE_OPTIONS = {
     "thinking": ("思考档(1.0/0.95/20)",          ["--presence-penalty", "0", "--temperature", "1.0", "--top-p", "0.95", "--top-k", "20"]),
     "greedy":   ("贪心(greedy)",                 ["--greedy"]),
 }
+# 官方 B01 止血开关（官方出厂件已有、官方启动器未写）：防“超池+大输出租约 ⇒ worker 崩/进程静默退出”。
+HEMOSTAT_OPTIONS = {
+    "on":  ("开（推荐·防 B01 崩溃）", ["--kv-lease-growth", "--recover-invariant-failures"]),
+    "off": ("关（官方 bat 原样）", []),
+}
 
 DIMENSIONS = [
     ("spec",   "档位 / 投机解码", SPEC_OPTIONS),
@@ -121,12 +126,13 @@ DIMENSIONS = [
     ("maxout", "输出上限",        MAXOUT_OPTIONS),
     ("vision", "视觉",            VISION_OPTIONS),
     ("sample", "采样",            SAMPLE_OPTIONS),
+    ("hemostat", "止血(B01)",     HEMOSTAT_OPTIONS),
 ]
 
 # 默认组合 = 官方 start-pq2-dflash.bat 的等价参数
 DEFAULTS = {
     "spec": "dflash2", "kv": "k8v4", "ctx": "256k", "kvcap": "17920", "hostkv": "16384",
-    "prefill": "1024", "think": "none", "maxout": "32768", "vision": "on", "sample": "shipped",
+    "prefill": "1024", "think": "none", "maxout": "32768", "vision": "on", "sample": "shipped", "hemostat": "on",
 }
 
 DIM_TIPS = {
@@ -140,6 +146,7 @@ DIM_TIPS = {
     "maxout": "服务端默认输出上限（--default-max-tokens）。⚠ 客户端请求的 max_tokens 必须 ≤ 池 token 数(17920)，否则 worker 崩。",
     "vision": "视觉（多模态）。发货默认开；显存紧时关掉省一大块。",
     "sample": "采样预设。默认 = 官方发货值 0.7/0.9/20、presence 0。",
+    "hemostat": "官方 B01 止血：--kv-lease-growth（租约按需增长，掐掉“超池+大输出 ⇒ worker 崩”的触发条件）+ --recover-invariant-failures（出问题只废当前请求、不弄死引擎）。官方出厂件支持，官方 bat 未写。",
 }
 
 # 命名组合预置（首次运行若无配置文件则落盘）
@@ -182,6 +189,7 @@ def build_command(combo, port=PORT_DEFAULT):
     argv += THINK_OPTIONS[combo["think"]][1]
     argv += ["--max-concurrency", "1", "--max-shared-prefixes", "0"]   # 铁律：ring 单路 / 防打砖
     argv += SAMPLE_OPTIONS[combo["sample"]][1]
+    argv += HEMOSTAT_OPTIONS[combo.get("hemostat", "on")][1]           # B01 止血（E5 决定：默认开）
     return ENGINE, argv
 
 
