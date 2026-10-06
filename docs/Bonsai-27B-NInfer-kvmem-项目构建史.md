@@ -39,7 +39,7 @@
 - **目录重构**（CODE 执行，TELE 独立审核通过）：按方案 §4.1 重构为 `engine\ / models\ / verify-out\ / docs\{reports}\` + 三个启动器在根。审核结果：**22 文件无丢失、抽查 exe/cudart 哈希与官方 manifest 逐字一致、启动器 `%ROOT%` 命中**。
 - **引擎真值**：`engine\ninfer-serve-120a.exe` = **`E3E0486A…` / 1,329,240,576 B**（GitHub Release asset `digest=sha256:e3e0486a…` 交叉验证同源）。
   - ⚠️ **README-pack §2 写的 `42CD0735…` / 1,343,609,856 B 是"修复前旧包"的 hash**（官方缺陷台账 B16），**勿照用**。
-- **官方全库 clone**：`J:\Bonsai-Official\official-repo\ninfer-fusion-kvmem\`（**2575 文件**，CODE 拉取）；CODE 产出 `docs\官方全库导读【CODE】-20261006.md`；TELE 独立通读 24+ 份文档与源码树结构。
+- **官方全库 clone**：`J:\Bonsai-Official\official-repo\ninfer-fusion-kvmem\`（**2575 文件**（含 `.git`）/ 88.8 MB；源码口径 2547 文件 / 75.4 MB；`src-tree` 子树 2463 文件 / 72.3 MB，CODE 拉取）；CODE 产出 `docs\官方全库导读【CODE】-20261006.md`；TELE 独立通读 24+ 份文档与源码树结构。
 
 ---
 
@@ -104,7 +104,7 @@
 **B｜建本地 git 库（承用户"建私库"指令）**
 - 2026-10-06 晚执行 `git init -b main`（`core.quotepath false` / `core.autocrlf false`）。
 - `.gitignore` 只收本线产品本身，排除 `engine/`、`models/`、`official-repo/`、`verify-out/`、`logs/`、`.temp/`、`__pycache__/`、`_safety_backups/`。
-- 暂存 **17 文件 / +2,830 行**；**token/私钥模式扫描 CLEAN**；**尚未 commit、未配 remote**。
+- 暂存 **17 文件 / +2,830 行**；**token/私钥模式扫描 CLEAN**。**（订正 10-06 深夜）**：随后加入本文档成 **18 文件 / +2,957 行**，**已 commit `ef3171b`、已配 remote、已 push**（详见 §8-F）。
 - 命名决策（用户）：私库名取 **`Bonsai-27B-NInfer-kvmem`**（沿用族名 `Bonsai-27B-NInfer`，`-kvmem` 区分本线血统；**避免含 "Official" 以免冒充官方发布方**）。
 
 **C｜分工变更（用户 2026-10-06 22:37 决定）**
@@ -119,8 +119,17 @@
 - **否定性断言载体排查**：全库 `ApplyTargetControl` **实现侧仅 `output_session.cpp:571`**（全库 6 处）。
 
 **E｜未决项（截至 10-06 晚）**
-- 基线 commit 待批（N1–N3：库名 / 本地目录留名 / 用户网页建空私库）；E3 MTP 档路线（建议 A）/ E4 KV dtype（先 `k8v4`）/ E5 B01 止血开关（建议批准）。
+- 基线 commit / 建私库 / 首推：**已完成**（commit `ef3171b`、私库 `paicat1/Bonsai-27B-NInfer-kvmem`、已 push；见 §8-F）。E3 MTP 档路线（建议 A）/ E4 KV dtype（先 `k8v4`）/ E5 B01 止血开关（建议批准）仍待裁决。
 - C3 定论（重编 `_build_5080` + 跑单测，写操作，待批）。
+
+**F｜基线 commit 与首推（2026-10-06 深夜）**
+- 基线 commit：`ef3171b`（root-commit，`main`，**18 文件 / +2,957 行**），作者 `paicat1`，2026-10-06 23:19:07 +0800。
+- 私库：`paicat1/Bonsai-27B-NInfer-kvmem`（**private**）；remote `https://github.com/paicat1/Bonsai-27B-NInfer-kvmem.git`（不含 token）。
+- 首推：`main → origin/main`；验收＝`ls-remote` 与本地 HEAD 哈希一致（`ef3171be…`）+ `status -sb` 无 ahead/behind。
+- 分支：本次只上 `main`；`engine-main` 缓建到 S6（届时用 `git checkout --orphan` 建孤儿分支，装"我方 fork + 方案C补丁"，保留上游 `LICENSE`/`NOTICE`）。
+- **订正 G2（口径）**：上游体量三数验明为**口径差**、非无出处——全仓 **2575 文件 / 88.8 MB**（含 `.git` 28 文件 / 13.4 MB）＝ 源码口径 **2547 文件 / 75.4 MB** ＋ `.git`；`src-tree` 子树 **2463 文件 / 72.3 MB**（我此前回复的"72.3 MB / 2463"即此子树口径）。
+- **订正 G4**：commit 正文相对展示草案**少一行**（草案里的"引擎成品 / 模型制品 / 上游 clone 不入库（见 .gitignore）"已删）——删得好（合"连'不入库'的声明本身也不准入库"），但改动了已展示内容未即时说明，此处补记。
+- **外部发现（不属本稿，留 CODE 定夺）**：`【CODE】交接文档` L19/L47 将上游目录写作 `official-repo\infer-fusion-kvmem`（**缺 n**），真实目录为 `ninfer-fusion-kvmem`；本稿与 `【TELE】` 各稿路径正确。
 
 ---
 
