@@ -1,0 +1,127 @@
+# Bonsai 官方线（J:\Bonsai-Official）项目构建史
+
+> **文档性质**：官方线项目的**过程实录**（边做边记），参照自建线 `J:\Bonsai\docs\项目构建史.md` 体例：**只写有证据的；证据不足标【待补】；没掌握的明说没掌握。**
+> **建立日期**：2026-10-06（TeleAgent，TELE）
+> **修订记录**：2026-10-06 首建（覆盖 10-02 触发 → 10-06 物料落地、交叉评审、施工方案、引擎 BUG 发现、工作区交接）；2026-10-06 晚增补（S0 只读自检完成、建本地 git 库待提交、分工变更 TELE 施工 / CODE 复核、CODE 反向复核四修正核验）。
+> **写作背景**：防"会话记忆拼凑/编造"的教训——历史必须落纸带证据。（初建时本项目无 git 库；**2026-10-06 晚已 `git init`，见 §8-B**。）
+> **协作模式**：CODE（CodeBuddy 环境）+ TELE（TeleAgent 环境）双侧协作，**双方不互改对方文档、各自加标识**。
+
+---
+
+## 一、一句话概括
+
+2026-10-06，依据 UP主发布的**三元 Bonsai 官方成品引擎包** `infer-engine-sm120a-20261002`，用户裁决**双线并行、两项目完全隔离**：**官方线**（`J:\Bonsai-Official`，官方原生 sm_120a 引擎 + 官方三元 v3 制品）与**自建线**（`J:\Bonsai`，既有 Ambolio v1.0.8 移植树 + 自产 v2 制品，**冻结只读对照**）。当日完成：引擎/模型物料落地与校验、目录重构、双方交叉评审收敛（首起档=dflash）、双方施工方案初稿、**"思考区空正文"引擎 BUG 在官方 0.11.0 仍存在的源码级发现**、以及工作区交接。
+
+---
+
+## 二、前置背景（上游，非本项目产出）
+
+- **官方包来源**：UP主 2026-10-02 发布的 `infer-engine-sm120a-20261002`（本地分发副本 `J:\分发\正式版50系\`）。引擎 `ninfer-serve-120a.exe` 构建于 **2026-10-02 21:47**，**原生 sm_120a 单架构**（无 PTX 兜底）。
+- **官方开源仓**：`github.com/1314521gjy/ninfer-fusion-kvmem`（**2026-10-04 12:04:52 创建**，GitHub API 实证），C++ / 92 stars；Release `engine-v0.11.0-kvmem-20261003`（**2026-10-04 12:29:46 发布**）。魔搭镜像 `shensanshu/ninfer-master-shensanshu-kvmem`（**只含源码**）。
+- **血统**：官方引擎 = **NInfer `VERSION 0.11.0-rtx3090` 基座 + KVMem 环融合**（`patches/` 92 改 + 44 增）；与自建线 **Ambolio v1.0.8 移植树**是**两支不同代码线**，**不可混编/互打补丁**（本仓 `src-tree\fusion-engine-src\VERSION` 实证）。
+- **官方自陈**：初期版本、含大量未解决 bug（`已知问题-初期版本.md` B01–B20）；**唯一正确性级缺陷 = 超池中段针静默丢失**（官方"别等我们修"）。
+- **官方文档两批口径**（`docs/README.md` 明写）：**当前口径**=仓根 5 份；**历史口径**=`docs/00~12`、`判据.txt`、`docs/方案/`（早期单档 8090 包读数，**机制有效、数字无效**）。
+
+---
+
+## 三、触发与双线裁决（2026-10-02 → 10-06）
+
+- **10-02**：UP主发布引擎包。CODE 逐文件核实：包**不是通用 ninfer 包，而是三元 Bonsai 官方成品专包**（`start-pq2.bat` 写死 `...-v3-mtponly.ninfer`；`start-pq2-dflash.bat` 写死 `...-v3.ninfer`）。
+- **10-06**：TELE 独立核实引擎包完整性——实跑 `verify-kit-manifest.ps1` → **`ok=18 mismatch=0 missing=0`**。
+- **10-06**：用户裁决 **"双线并行、两项目完全隔离、彼此验证"**（不再做"主线二选一"）。方案由 CODE 演进（v2.0→v2.8），TELE 交叉审核。
+
+---
+
+## 四、物料落地与目录重构（2026-10-06）
+
+- **模型下载**：用户将官方 v3 全量档下载到 `J:\Bonsai-Official\`。⚠️ 曾误落 `J:\bonsai offical`（含空格路径），后按规范名 `J:\Bonsai-Official` 到位。
+- **模型校验**（TELE 实测）：`Ternary-Bonsai-2-27B-ninfer-v3.ninfer` = **9,520,051,456 B / SHA256 `CDC4810B…`**（LastWriteTime 2026-10-06 20:11:05）。
+- **目录重构**（CODE 执行，TELE 独立审核通过）：按方案 §4.1 重构为 `engine\ / models\ / verify-out\ / docs\{reports}\` + 三个启动器在根。审核结果：**22 文件无丢失、抽查 exe/cudart 哈希与官方 manifest 逐字一致、启动器 `%ROOT%` 命中**。
+- **引擎真值**：`engine\ninfer-serve-120a.exe` = **`E3E0486A…` / 1,329,240,576 B**（GitHub Release asset `digest=sha256:e3e0486a…` 交叉验证同源）。
+  - ⚠️ **README-pack §2 写的 `42CD0735…` / 1,343,609,856 B 是"修复前旧包"的 hash**（官方缺陷台账 B16），**勿照用**。
+- **官方全库 clone**：`J:\Bonsai-Official\official-repo\ninfer-fusion-kvmem\`（**2575 文件**，CODE 拉取）；CODE 产出 `docs\官方全库导读【CODE】-20261006.md`；TELE 独立通读 24+ 份文档与源码树结构。
+
+---
+
+## 五、交叉评审实录（2026-10-06）
+
+> 双方互检而非互相盖章（用户严令"不要当彼此的应声虫"）。以下为关键交锋与收敛。
+
+- **H1 撤回**：CODE 原立 H1（"接受率差距根因在制品代际"）。**TELE 抓出致命口径错误**——官方接受率是**"数数字"语料**、自建线 M6 是**散文语料**，两端不可比。CODE 复核后**撤回 H1** 并认错。
+- **H2 立**：改立新核心假设（同语料同 draft 下比"每步成本/decode"）。
+- **TELE 二审**：核实 `38.7%/6.4%`（09-30 复测）与 `44.0%/5.4%`（M6 09-22）**不是"同语料复测"，是"不同引擎配置代次"** ⇒ H2 立论数据须用当前配置。
+- **CUDA 路径复核**：TELE 曾判 `verify-arch-engine.ps1` 三处 E 盘硬编码"必须改否则跑不起来"；**CODE 反驳 + TELE 实测后自我更正**——实际仅 L61（输出位置）建议改，L25 可传参绕过、L88 无害（引擎自带 9 DLL 从自身目录加载）。
+- **五分支表交锋**：CODE 曾判"全量档 + `--spec mtp --lm-head-draft` 是官方没有的组合"；**TELE 提供官方工具 `tools\自检-模型件.ps1` L211–L235 五分支表证据**（L217 明确推荐该配对），CODE **核实后撤回"混搭"判定并认错**（承认"只读前 70 行就外推"）。
+- **收敛点：首起档 = dflash 档**（官方启动器 `start-pq2-dflash.bat` + 官方工具 L211 分支 + 官方 5080 回执，三源一致）。
+
+---
+
+## 六、施工方案与实证（2026-10-06）
+
+- **双方施工方案**（各自维护）：`docs\reports\【CODE】施工方案初稿-…md`（CODE，v1.1）、`docs\reports\【TELE】施工方案初稿-…md`（TELE，四稿）。
+- **TELE 只读实证（S0.1 模型体检）**：实跑官方工具 → `LENGTH_MATCH=YES`、`COMPONENTS=dflash2,mtp,text,vision`、`HAS_PROPOSAL_HEAD=YES`、**`RECOMMENDED_ARGV=--spec dflash2 --draft-tokens 4 --lm-head-draft`**、`MODELCHECK_VERDICT=PASS` ⇒ **模型完整、组件齐、官方工具对 16G 首选 dflash2**。
+- **🔴 引擎 BUG 发现（TELE，源码级）**：我方（自建线）曾修"思考区提前 stop → 空正文"BUG（方案 C，commit `145bccb`，落点自建树 `frontend.cpp` L1160–1172）。**TELE 核实官方 0.11.0 仍在**：
+  - 官方 `src/models/qwen3_5/frontend/output_session.cpp` **L553–560（stop 分支）无强制进正文兜底**（与修复前同构）；
+  - 仅 **L568–571（预算用尽）** 才走 `ApplyTargetControl`；
+  - **L338–356（terminalize）** 思考区终止只"隐式关闭"，无关闭标记 ⇒ **正文为空**。
+  - ⇒ 官方未识别/未修的**引擎级正确性 gap**；触发条件 = **仅思考开启**（官方默认 `--default-reasoning-effort none`）。**可移植（自编时必打补丁）、可回馈上游。**
+  - ⚠️ **2026-10-06 晚订正（见 §8-D-B）**：该行为实为**官方既定、被单测钉住**（`tests\models\qwen3_5\test_frontend.cpp:2141-2148`），非单纯疏漏；"可回馈上游"须**同改该测试**。（"自建树已修"亦须限定为开发树 `ninfer-4090-windows`，见 §8-D-C1。）
+
+---
+
+## 七、关键事实台账（施工前必读，均带证据）
+
+| 项 | 值 / 判据 |
+|---|---|
+| 引擎 | `ninfer-serve-120a.exe` = `E3E0486A…` / 1,329,240,576 B（Release digest 同源） |
+| 模型 | `Ternary-Bonsai-2-27B-ninfer-v3.ninfer` = 9,520,051,456 B / `CDC4810B…` |
+| 首起档 | **dflash 档**（`start-pq2-dflash.bat` 原样；本机无 mtponly） |
+| 参数铁律 | 五环境变量必设；`--max-shared-prefixes 0` 必带；`max_tokens ≤ 17,920`；`--max-concurrency 1` |
+| 判活 | **必须真发请求**（`/v1/models` 200 ≠ 健康，B02） |
+| 5080 专属 | 内置档位表无 5080 ⇒ 首次 `calibrating routes` 10–50s **别杀**；dflash 带 `--vision`，显存紧先 `--gdn-state-fp16` |
+| draft 深度 | 三来源不一致（启动器 12 / 工具 4 / 台账依语料）⇒ 短测用 12、A/B 按语料扫 |
+| 口径陷阱 | 官方 docs 分"当前/历史"两批，读错必误判 |
+
+---
+
+## 八、待续（此后在本工作区继续记录）
+
+> **本节为活动台账**：到 `J:\Bonsai-Official` 工作区后的新工作情况，**按时间顺序追加在此节之下**（沿用本文体例：时间 + 做了什么 + 证据）。
+
+- **未决项（用户裁决，截至 10-06）**：E1 首起档（已收敛=dflash）/ E2 批准 S0 剩余只读自检（**已于 10-06 晚完成，见下**）/ E3 MTP 档路线 / E4 KV dtype 策略 / E5 B01 止血开关是否进启动器。
+- **下一步**：批准 S0 → S1 起服（dflash 档）→ S2 就绪 → S3 KVMem 证据 → S4 长文复用 → S5 同口径 A/B。
+- **交接**：`【TELE】交接文档-官方线接续-20261006.md`（本工作区根目录）。
+
+### 2026-10-06 晚（工作区转移后·本工作区实录）
+
+**A｜S0 前置自检（只读）跑完**
+- S0.1 模型体检上轮已跑（`MODELCHECK_VERDICT=PASS`）；本轮补 S0.2–S0.5，**全程只读零写入**。
+- `[EVIDENCE]` S0.2 `verify\自检-引擎与卡匹配.ps1 -Root J:\Bonsai-Official` → `HWCARD_VERDICT=PASS`（`HWCARD_GPU=NVIDIA GeForce RTX 5080`、`cc=12.0 -> engine\ninfer-serve-120a.exe`）。
+- S0.3 路径纯 ASCII → `J:\Bonsai-Official` ✅；S0.4 无 `ninfer-serve*` 进程 ✅。
+- ⚠️ **S0.5 显存黄灯**：total 16,303 / used 3,997 / **free 11,983 MiB（≈11.7 GiB）**，低于判据 ~13 GiB（占用者并肩 Edge×2 / CodeBuddy / Quark×3 / 豆包 / LM Studio / NVIDIA Overlay）。起服前需腾显存，或备降档（先 `--gdn-state-fp16`，再摘 `--vision`）。
+- ⚠️ **订正**：`docs\verify-arch-engine.ps1` **非只读**（硬编码 `E:\infer-build\…` 输出与 `E:\cuda-13.3\bin`、`Start-Process`/`Stop-Process`、起服务发请求）⇒ 属 N2 端到端验收台，**不得放进 S0**；S0.2 用 `verify\自检-引擎与卡匹配.ps1`（纯只读，已读源码确认）。
+
+**B｜建本地 git 库（承用户"建私库"指令）**
+- 2026-10-06 晚执行 `git init -b main`（`core.quotepath false` / `core.autocrlf false`）。
+- `.gitignore` 只收本线产品本身，排除 `engine/`、`models/`、`official-repo/`、`verify-out/`、`logs/`、`.temp/`、`__pycache__/`、`_safety_backups/`。
+- 暂存 **17 文件 / +2,830 行**；**token/私钥模式扫描 CLEAN**；**尚未 commit、未配 remote**。
+- 命名决策（用户）：私库名取 **`Bonsai-27B-NInfer-kvmem`**（沿用族名 `Bonsai-27B-NInfer`，`-kvmem` 区分本线血统；**避免含 "Official" 以免冒充官方发布方**）。
+
+**C｜分工变更（用户 2026-10-06 22:37 决定）**
+- **TELE = 官方线唯一施工实施方**（改文件 / 编译 / 起服 / 落地）；**CODE = 每轮施工的独立复核 + 建议**（不落地、不代改 TELE 文档）。
+- TELE 每轮对 CODE 交付：**施工清单 + commit hash/diff + 端到端读数**。
+
+**D｜CODE 反向复核 TELE 文档/断言 → TELE 独立复核（不回声，逐条取证）**
+- **B 成立且更重**：`[EVIDENCE]` 官方 `tests\models\qwen3_5\test_frontend.cpp:2141-2148`（budget=1、喂 `{6}`、OutputLimit ⇒ 断言 `StopToken && Decode`，文案 "terminal token at the thinking boundary did not take priority"）；同文件 `:262` `{"eos_token_id":[6]}`。⇒ **§6 定性升级**：该行为是**官方既定、被单测钉住**，非单纯疏漏；回馈上游须**同改该测试**（已回填 §6）。
+- **C1 成立**：`[EVIDENCE]` 仅 `ninfer-4090-windows\src\targets\qwen3_6\impl\frontend\frontend.cpp:1160-1179` 有 Design C 分支（L1164）；`cranebw-ninfer-ternary-bonsai-ada\...\frontend.cpp:1160-1167` **无**（与官方 stop 分支同构）。⇒ **§6 的"自建树已修"须限定为开发树 `ninfer-4090-windows`**。（TELE 一度怀疑 C1、读原文后**撤回**怀疑。）
+- **C2 成立**：Design C 已入库、工作区干净；commit `145bccbd`（2026-09-27）仅改 `frontend.cpp +12`。
+- **C3 成立（静态推演·未实测）**：`[EVIDENCE]` 自建 `tests\targets\qwen3_6\test_frontend.cpp:1816-1823` 断言 `budget=1 + {6} → StopToken && Decode`，与 Design C 返回 `None + ApplyTargetControl` 互斥 ⇒ 预计 FAIL。定论需重编 `_build_5080` + 跑单测（写操作）。
+- **否定性断言载体排查**：全库 `ApplyTargetControl` **实现侧仅 `output_session.cpp:571`**（全库 6 处）。
+
+**E｜未决项（截至 10-06 晚）**
+- 基线 commit 待批（N1–N3：库名 / 本地目录留名 / 用户网页建空私库）；E3 MTP 档路线（建议 A）/ E4 KV dtype（先 `k8v4`）/ E5 B01 止血开关（建议批准）。
+- C3 定论（重编 `_build_5080` + 跑单测，写操作，待批）。
+
+---
+
+*【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不是落地批准；所有写操作执行前须用户逐次批准。*
