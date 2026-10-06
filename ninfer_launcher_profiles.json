@@ -1,0 +1,38 @@
+{
+  "起服-dflash档": {
+    "spec": "dflash2",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "kvcap": "17920",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "none",
+    "maxout": "32768",
+    "vision": "on",
+    "sample": "shipped"
+  },
+  "备用-MTP档": {
+    "spec": "mtp",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "kvcap": "17920",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "none",
+    "maxout": "32768",
+    "vision": "on",
+    "sample": "shipped"
+  },
+  "省显存-无视觉": {
+    "spec": "dflash2",
+    "kv": "k8v4",
+    "ctx": "256k",
+    "kvcap": "17920",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "none",
+    "maxout": "32768",
+    "vision": "off",
+    "sample": "shipped"
+  }
+}
