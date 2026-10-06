@@ -131,6 +131,14 @@
 - **订正 G4**：commit 正文相对展示草案**少一行**（草案里的"引擎成品 / 模型制品 / 上游 clone 不入库（见 .gitignore）"已删）——删得好（合"连'不入库'的声明本身也不准入库"），但改动了已展示内容未即时说明，此处补记。
 - **外部发现（不属本稿，留 CODE 定夺）**：`【CODE】交接文档` L19/L47 将上游目录写作 `official-repo\infer-fusion-kvmem`（**缺 n**），真实目录为 `ninfer-fusion-kvmem`；本稿与 `【TELE】` 各稿路径正确。
 
+**G｜G1 实测闭环 + 启动器 v1 入库 + E1–E5 裁决（2026-10-06 深夜 → 10-07 凌晨）**
+- **G1 实测闭环（用户批准）**：自建线 `_build_5080` 重配 `BUILD_TESTING=ON`（`configure_exit=0`）→ 编 `ninfer_qwen3_6_frontend_test`（`BUILD_EXIT=0`）→ 跑测 **`TEST_EXIT=1`**，失败断言 = `tests\targets\qwen3_6\test_frontend.cpp:1821-1823` + `:1825-1826`（"terminal token at the thinking boundary did not take priority" / "terminal thinking boundary left control pending"）。⇒ **CODE 的静态推演成立**：Design C 补丁与既有单测断言互斥（定性＝"补丁未同步单测"）。首跑 `0xC0000135`（缺 FFMPEG 的 avcodec/avformat/avutil/swscale，补 PATH 后正常）。
+- **旧项目同步单测（用户"旧项目动手吧"）**：把 `test_frontend.cpp:1821-1826` 两条断言改为 Design C 新行为（`FinishReason::None + ApplyTargetControl`、`pending_control_tokens()` 非空）→ 重编（`BUILD_EXIT=0`）→ 重跑 **`TEST_EXIT=0`（转绿）**。旧项目改动**尚在工作区、未提交**。
+- **启动器 v1 入库**：commit `63f237b`（`feat(launcher)`，3 文件 / +584 行）→ push 成功（`362108c..63f237b`；验收远端 `refs/heads/main = 63f237be…`）。
+- **E1–E5 最终裁决（用户 2026-10-07）**：E1 首起档=dflash ✅；E2 S0 只读自检 ✅ 已跑；**E3=A**（MTP 档暂不弄；官方两 MTP 档分别指向 `v3-mtponly` / `bonsai2_27b_ternary_ptq1_native_mtp` 两模型件，本机均无 ⇒ **挂账，以后决策**）；**E4=A**（KV dtype 先 `k8v4`，异常试 `rk2v4-e8`；两者均已入启动器）；**E5=加**（B01 止血开关 `--kv-lease-growth` + `--recover-invariant-failures` 入启动器，默认开、可关）。
+- **启动器 E5 增量**：新增「止血(B01)」维度（默认开）；自证 `CORE_MATCH_LIST=True`（核心参数仍与官方 bat 逐字一致，两条止血为**有意新增**）。
+- **CODE 稿入库**：commit `cfd41f9`（`docs:`，2 文件 / +44−8）→ **push 待网络**（直连与 7890 探测均不通，本地 `ahead 1`）。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不是落地批准；所有写操作执行前须用户逐次批准。*
