@@ -137,7 +137,17 @@
 - **启动器 v1 入库**：commit `63f237b`（`feat(launcher)`，3 文件 / +584 行）→ push 成功（`362108c..63f237b`；验收远端 `refs/heads/main = 63f237be…`）。
 - **E1–E5 最终裁决（用户 2026-10-07）**：E1 首起档=dflash ✅；E2 S0 只读自检 ✅ 已跑；**E3=A**（MTP 档暂不弄；官方两 MTP 档分别指向 `v3-mtponly` / `bonsai2_27b_ternary_ptq1_native_mtp` 两模型件，本机均无 ⇒ **挂账，以后决策**）；**E4=A**（KV dtype 先 `k8v4`，异常试 `rk2v4-e8`；两者均已入启动器）；**E5=加**（B01 止血开关 `--kv-lease-growth` + `--recover-invariant-failures` 入启动器，默认开、可关）。
 - **启动器 E5 增量**：新增「止血(B01)」维度（默认开）；自证 `CORE_MATCH_LIST=True`（核心参数仍与官方 bat 逐字一致，两条止血为**有意新增**）。
-- **CODE 稿入库**：commit `cfd41f9`（`docs:`，2 文件 / +44−8）→ **push 待网络**（直连与 7890 探测均不通，本地 `ahead 1`）。
+- **CODE 稿入库**：commit `cfd41f9`（`docs:`，2 文件 / +44−8）→ ~~push 待网络~~ **已补推**（代理恢复后 `63f237b..cfd41f9` 成功；见 §8-H）。
+
+**H｜G11/G12 收尾 + S1 起服 + S2 就绪自测（2026-10-07 凌晨）**
+- **G11 订正（启动器等价注释）**：`ninfer_launcher.py` 3 处过时注释（L8 文档串 / L132 默认组合 / L179 函数串）改为“核心逐字等价 + E5 止血两旗（有意新增）”；commit **`bc11f8c`**（`docs(launcher)`，+3/−3）→ push `b1caa7b..bc11f8c`（远端 `refs/heads/main = bc11f8c…`）。复验 `py_compile=0` / `CORE_MATCH_LIST=True` / `KV_COUNT=9` / `hemostat=on`。
+- **G12 旧引擎仓推送（用户“只推我们自己的仓”）**：旧引擎仓 `J:\Bonsai\landing\repos\ninfer-4090-windows` 的 `main` 跟踪 **`origin/main` = `github.com/Ambolio/ninfer-4090-windows`（公开上游移植仓）**、`ahead 20` ⇒ **裸 `git push` 会把 20 个本地提交推给公开上游，严禁**；那 20 个全是我们自建线 M0–M6 的引擎改动，只应进私库。**实推（显式远端，未碰 origin）**：`git push paicat1 main:engine-main` → `f90e30c1..ca4196ac`；验收远端 `paicat1/Bonsai-27B-NInfer → refs/heads/engine-main` = `ca4196ac` = 本地 HEAD。
+- **S1 起服（用户双击启动器）**：`ninfer-serve-120a` pid **25992**，监听 **`127.0.0.1:8094`**（dflash 档）。
+- **S2 就绪自测（TELE 实跑，复用启动器同款代码）**：`GET /v1/models` **200**（id=`qwen3.8-27b`、`context_window=262144`、`status=loaded`、`vision=true`）；`POST /v1/chat/completions`（真发，`max_tokens=64`）**200**、`finish_reason=stop`、**content="1+1 等于 2。"** ⇒ **真在服务，非假健康**。
+- **对侧 stale 订正**：CODE 报“旧 repo `_build_5080` 仍 `BUILD_TESTING=ON` 待还原”——实测 **`BUILD_TESTING:BOOL=OFF`**（无需再动）；对侧另报“`.temp\g1_backup` 全盘不存在”——实测**存在**（在 `J:\Bonsai-Official\.temp\g1_backup\`，即**备份放在了己方工作区**，对侧在别处搜未果）。
+- **网络观测**：本时段**直连 `github.com:443` 不通 / 代理 `127.0.0.1:7890` 通**（代理由用户控制；关闭时表现为握手失败）。
+- **未做**：S3（KVMem 检索证据）与 S4/S5。
+- **挂账（属旧项目，用户裁定先不管）**：`docs\reports\【TELE】DEEPSEEK报告核查与接纳评估-20261006.md`（核查**自建线**的第三方 DEEPSEEK 审核报告）——旧项目正按其报告审核；**待旧项目跑通、本项目全部搞好后再评估其价值**。
 
 ---
 
