@@ -39,7 +39,7 @@ PORT_DEFAULT = 8094
 PYTHON_EXE = sys.executable.replace("pythonw.exe", "python.exe").replace("pythonw", "python")
 
 # 池 token 数（= config 里的 --kv-capacity）。硬约束 = 单请求的【prompt_tokens + 输出(max_tokens) ≤ 池】：
-# 超过则 (a) 未开止血 → worker 崩且不自愈；或 (b) 开了 --kv-lease-growth（E5 止血）→ 被静默截断(finish=short，
+# 超过则 (a) 未开止血 → worker 崩且不自愈；或 (b) 开了 --kv-lease-growth（E5 止血）→ 被静默截断(finish_reason=length、
 # 内容像正常但只有半截)。--default-max-tokens 只是服务端默认上限，不是硬约束。
 KV_POOL_TOKENS = 17920
 
@@ -149,7 +149,7 @@ DIM_TIPS = {
     "hostkv": "Host 侧 KV 预算（MiB，--host-kv-mib）。发货默认 16384。",
     "prefill":"文本 prefill 分块（--prefill-chunk，128 的倍数）。发货默认 1024。",
     "think":  "思考模式。发货默认 none（关思考）。启用思考后注意 §4.2 的“思考完空正文”已知问题。",
-    "maxout": "服务端默认输出上限（--default-max-tokens）。⚠ 硬约束 = 单请求【prompt_tokens + 输出 ≤ 池(17920)】；超池会被 --kv-lease-growth 静默截断(finish=short)或(无止血)使 worker 崩。发请求时请控 prompt 长。",
+    "maxout": "服务端默认输出上限（--default-max-tokens）。⚠ 硬约束 = 单请求【prompt_tokens + 输出 ≤ 池(17920)】；超池会被 --kv-lease-growth 静默截断(finish_reason=length)或(无止血)使 worker 崩。发请求时请控 prompt 长。",
     "vision": "视觉（多模态）。发货默认开；显存紧时关掉省一大块。",
     "sample": "采样预设。默认 = 官方发货值 0.7/0.9/20、presence 0。",
     "hemostat": "官方 B01 止血：--kv-lease-growth（租约按需增长，掐掉“超池+大输出 ⇒ worker 崩”的触发条件）+ --recover-invariant-failures（出问题只废当前请求、不弄死引擎）。官方出厂件支持，官方 bat 未写。",
@@ -173,7 +173,7 @@ def validate(combo):
         warns.append(f"输出上限({combo['maxout']}) > 池 token 数({KV_POOL_TOKENS})——发货默认如此；"
                      f"真正的硬约束 = 单请求【prompt_tokens + 输出(max_tokens) ≤ {KV_POOL_TOKENS}】："
                      f"超过会在 prefill 阶段超池——(a)未开止血→worker 崩且不自愈、(b)已开 --kv-lease-growth→"
-                     f"被静默截断(finish=short、内容像正常但只有半截)。发请求时请确保 prompt 长度 + max_tokens ≤ {KV_POOL_TOKENS}。")
+                     f"被静默截断(finish_reason=length、内容像正常但只有半截)。发请求时请确保 prompt 长度 + max_tokens ≤ {KV_POOL_TOKENS}。")
     if not os.path.exists(ENGINE):
         warns.append(f"未找到引擎：{ENGINE}")
     if not os.path.exists(MODEL):
