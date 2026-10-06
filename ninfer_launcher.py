@@ -16,6 +16,7 @@ import json
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
 import tkinter as tk
@@ -31,7 +32,11 @@ ENGINE      = os.path.join(ROOT, "engine", "ninfer-serve-120a.exe")
 ENGINE_DIR  = os.path.dirname(ENGINE)
 MODEL       = os.path.join(ROOT, "models", "Ternary-Bonsai-2-27B-ninfer-v3.ninfer")
 CONFIG_FILE = os.path.join(ROOT, "ninfer_launcher_profiles.json")
+LOG_DIR = os.path.join(ROOT, "logs")
+TEE_SCRIPT = os.path.join(ROOT, "serve_tee.py")
 PORT_DEFAULT = 8094
+# tee 需要“带控制台”的 python.exe（GUI 以 pythonw 运行，用它起 tee 会得空白窗口）
+PYTHON_EXE = sys.executable.replace("pythonw.exe", "python.exe").replace("pythonw", "python")
 
 # 池 token 数（= config 里的 --kv-capacity）。客户端请求的 max_tokens 必须 ≤ 它，
 # 否则 worker 崩且不自愈（官方 docs/04 L1 表；--default-max-tokens 是服务端默认上限）。
@@ -488,10 +493,12 @@ class LauncherApp:
             return
         try:
             CREATE_NEW_CONSOLE = 0x00000010
-            subprocess.Popen([exe] + argv, env=env_for_launch(), cwd=ROOT,
+            logfile = os.path.join(LOG_DIR, "serve_" + time.strftime("%Y%m%d_%H%M%S") + ".log")
+            subprocess.Popen([PYTHON_EXE, TEE_SCRIPT, logfile, exe] + argv,
+                             env=env_for_launch(), cwd=ROOT,
                              creationflags=CREATE_NEW_CONSOLE)
-            self.status.config(text="✓ 已启动（新控制台窗口，关窗即停）—— 首次启动见 calibrating routes 请勿杀进程",
-                               fg="#4a6b4a")
+            self.status.config(text="✓ 已启动（控制台窗口 + 日志落盘）—— 关窗即停；首次见 calibrating routes 请勿杀\n"
+                                    "   日志：" + logfile, fg="#4a6b4a")
         except Exception as e:
             messagebox.showerror("启动失败", str(e))
 
