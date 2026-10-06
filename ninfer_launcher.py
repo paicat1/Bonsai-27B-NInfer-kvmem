@@ -5,7 +5,7 @@
 零外部依赖（仅 Python 自带 tkinter / urllib / json / subprocess）。
 
 对照施工方案：
-  · S1 起服：首起档 = dflash 档（默认组合即官方 start-pq2-dflash.bat 的等价 argv）
+  · S1 起服：首起档 = dflash 档（默认组合 = 官方 start-pq2-dflash.bat 的参数 + E5 止血两旗；核心参数逐字等价）
   · S2 就绪判据：判活必须真发请求（/v1/models 200 ≠ 能服务）
   · 参数铁律：KVMem 五环境变量自动注入；--max-shared-prefixes 0 / --max-concurrency 1 强制
 
@@ -129,7 +129,7 @@ DIMENSIONS = [
     ("hemostat", "止血(B01)",     HEMOSTAT_OPTIONS),
 ]
 
-# 默认组合 = 官方 start-pq2-dflash.bat 的等价参数
+# 默认组合 = 官方 start-pq2-dflash.bat 的参数（核心逐字等价）+ E5 止血两旗（--kv-lease-growth / --recover-invariant-failures，有意新增）
 DEFAULTS = {
     "spec": "dflash2", "kv": "k8v4", "ctx": "256k", "kvcap": "17920", "hostkv": "16384",
     "prefill": "1024", "think": "none", "maxout": "32768", "vision": "on", "sample": "shipped", "hemostat": "on",
@@ -176,7 +176,7 @@ def validate(combo):
 
 
 def build_command(combo, port=PORT_DEFAULT):
-    """返回 (exe, argv)。argv 为引擎参数（不含 exe）；组合与官方 start-pq2-dflash.bat 等价。"""
+    """返回 (exe, argv)。argv 为引擎参数（不含 exe）；核心参数与官方 start-pq2-dflash.bat 逐字等价，另含 E5 止血两旗（hemostat=on，可关）。"""
     argv = [MODEL, "--host", "127.0.0.1", "--port", str(port), "--model-id", "qwen3.8-27b"]
     argv += CTX_OPTIONS[combo["ctx"]][1]
     argv += KVCAP_OPTIONS[combo["kvcap"]][1]
