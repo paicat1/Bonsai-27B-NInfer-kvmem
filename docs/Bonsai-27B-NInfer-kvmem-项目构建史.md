@@ -176,6 +176,55 @@
 - **对侧 P3（query_tokens）复读结论（TELE 反向复核）**：同一请求的 SELECT 行里 `query_tokens` **有两种取值**——尾窗规则块=**64**；D-12 span 生效块=**我探针 24 / CODE 探针 15**（= 各自 `span_abs` 长度）。我引的那条（L163）**确为 `query_tokens=24`**，**读数无误**；对侧 P3 疑为引了"尾窗块"那一行 ⇒ **此 P3 不成立**。
 - **元数据滞后未复现**：对侧记"J 盘 size/mtime 元数据缓存滞后"；本轮实测 `meta.Length == realfile.size == 100,356`（一致）。仍遵"读日志以实读内容为准"。
 
+**L｜G15 紧探针：题面超池后的长文检索（2026-10-07 凌晨，用户批准 G15）**
+- **探针**：正文（埋针 `G15-TIGHT-PROBE-9921` 于 ~50%）+ 问句独立第二条 user；**`prompt_tokens=24,500`**（**> 设备池 17,920**；< 上下文 262,144）。
+- **判据① 针被答出**：content = **`G15-TIGHT-PROBE-9921`** ✅（HTTP 200、`finish_reason=stop`）
+- **判据③ `scored_kept>0`**：末条 SELECT `scored_kept=304 candidates=304 sum_score=24.000` ✅
+- **判据② kept 覆盖针位**：末条 KEPT `count=368 max=367`（含针估块 ~188）✅ —— **但 `kept = n_blocks = 368`（全保留）**
+- **诚实局限（升级版）**：题面（24,500 token / 368 块）**已超设备池**（17,920 token / 280 页），`kept` 仍 = 全部 368 块 ⇒ **未观察到选择性淘汰**（疑与 `NINFER_HOST_PAGEABLE=1` + `NINFER_KV_REUSE_HOSTBACKED=1` 的 host-backed KV 有关，块未真正落地淘汰）。⇒ 本发只证"**打分生效 + 超池后针仍可检索**"，**仍未证"池压下真淘汰时的取舍正确性"**；若要观测，需更紧形态（如关 host-backed / 显式小池强制淘汰）。**待用户裁决是否再追。**
+
+**M｜G17 约束精确化落地 + G16 初步核实（2026-10-07）**
+- **G17 落地（用户裁决"先落 G17 再切线跑 S5"，并授权 TELE 自己起服·公开可见窗口）**：把 `ninfer_launcher.py` 中"客户端 max_tokens ≤ 池(17920)"的旧口径，**精确化为「单请求 prompt_tokens + 输出(max_tokens) ≤ 池(17920)」**。最小改动（仅 3 处字符串）：
+  - `KV_POOL_TOKENS` 注释（L41-43）→ 写明硬约束 = prompt+输出 ≤ 池；超池 (a)无止血→worker 崩不自愈、(b) 已开 `--kv-lease-growth`→被**静默截断**(finish=short、内容像正常但半截)。
+  - `validate()` 告警语（L171-176）→ 同上精确化。
+  - `DIM_TIPS["maxout"]`（L149）→ 同上。
+  - `[EVIDENCE] py_compile exit=0`；`git diff ninfer_launcher.py` 仅 3 处字符串改动。
+- **触发实证（日志 serve_20261007_011441.log）**：req#6 `prompt 20,045 → output 3 | finish=output limit | cache 0 (0.0%)`——**超池 + 大输出 ⇒ `--kv-lease-growth` 静默截断只吐 3 token**（与 G17 告警语逐字吻合）；req#7/#8 同 prompt `cache 20,038 (100.0%, turn closure) | TTFT 164/139ms`——**长文 KV 轮间复用真实生效**。
+- **G16 初步核实（源码 + 日志，未闭环）**：`serve_options.h:93` `allow_prefix_reuse=true` 与 `engine_core.h:77` `max_shared_prefixes`（ResourceManager）是**两个不同开关**；`serve_options.h:94-96` 注释明写 `--max-shared-prefixes` 是"**跨无关调用者**自动共享前缀"的开关，**不关同会话轮间 turn-closure 的 KV 保留** ⇒ req#7/#8 的 100% cache 属轮间复用，与 `max-shared-prefixes 0` 不冲突。**此 G16 为初步核实；日志中未见 `prompt_n=7` 字样（原始出处待定位）** ⇒ 挂账继续待收敛。
+
+**N｜S5 官方侧两组数据（2026-10-07，用户裁决"官方线两组跑完再切线"）**
+- **数数字**（dflash 档 draft-tokens=12，1..300 接着数，1000 出，temp=0）：`req# prompt 1,133 | output 965 | TTFT 504 ms | prefill 2.66k tok/s | decode 666.9 tok/s | dflash2 accepted 883/965 (91.5%)`
+- **中文散文**（"秋天图书馆的午后"，256 出）：`req#12 | prompt 26 | output 216 | TTFT 170 ms | decode 80.8 tok/s | dflash2 accepted 65/1,745 (3.7%)`
+- **英文散文**（"history of computing essay"，256 出）：`req#13 | prompt 21 | output 221 | TTFT 166 ms | decode 137.7 tok/s | dflash2 accepted 134/1,000 (13.4%)`
+- **观察**：同一 dflash 档下，数数字接受率 91.5% 而散文骤降到 3.7%（中文）/13.4%（英文）——正是官方教程"语料不能换：换散文 decode 掉一半"的直接证据（官方 4080S 数数字 91.5%，本机 5080 复现 91.5%）。⇒ 官方"decode 高"仅对数数字语料成立；散文与自建 M6（44.0%/45.9%）的差距本质是**语料效应**，印证 H1 撤回。
+- **下一步**：切线到自建线（同语料同 draft）补齐对比表（待用户确认切线时机）。
+
+**O｜S5 自建线补齐 + A/B 对比（2026-10-07）**
+- **切线实录（用户授权 TELE 自起服·可见窗口）**：关官方 8094 → 起自建线。首试 k8v4-**256K** 档（MTP K2）两次皆**卡死**：`engine ready` 但 HTTP 不响应（显存贴线 free ~192-365 MiB，HTTP 服务层初始化缺资源），用户腾显存后仍卡 ⇒ **按用户指示换 k8v4-224K 档**（`--max-context 224000`，free 1.2 GiB，**首次即就绪**）。
+- **⚠️ 首次 256K 档还暴露思考污染**：默认 `thinking xhigh`（bat 未关），`req#1 output 1,000 全被思考 token 占走、正文空` ⇒ 224K 重启时**显式加 `--no-thinking`**，与官方线（`--default-reasoning-effort none`）对齐。
+- **自建线权威读数（k8v4-224K·MTP K2·no-thinking·greedy，窗口 req# 行）**：
+  - 数数字（max 1000）：`req#1 | stop | prompt 1,133 | output 400 | prefill 943.8 | decode 566.4 | mtp 263/272 (96.7%)`
+  - 中文散文（256）：`req#2 | output limit | prompt 26 | output 256 | TTFT 399ms | prefill 98.4 | decode 110.5 | mtp 111/286 (38.8%)`
+  - 英文散文（256）：`req#3 | output limit | prompt 21 | output 256 | TTFT 357ms | prefill 81.7 | decode 138.4 | mtp 129/250 (51.6%)`
+- **官方线读数（dflash2 K12·k8v4·256K·no-thinking·greedy）**：
+  - 数数字（max 1000）：`req#11 | prompt 1,133 | output 965 | TTFT 504ms | decode 666.9 | dflash 883/965 (91.5%)`
+  - 中文散文：`req#12 | output 216 | TTFT 170ms | decode 80.8 | dflash 65/1745 (3.7%)`
+  - 英文散文：`req#13 | output 221 | TTFT 166ms | decode 137.7 | dflash 134/1000 (13.4%)`
+- **A/B 判决（H2，同语料同 draft 口径）**：
+  | 语料 | 自建 decode/接受 | 官方 decode/接受 | 判读 |
+  |---|---|---|---|
+  | 数数字 | 566.4 / 96.7% | 666.9 / 91.5% | 官方 decode +18%（官方数优先） |
+  | 中文散文 | 110.5 / 38.8% | 80.8 / 3.7% | **自建 decode +37%** |
+  | 英文散文 | 138.4 / 51.6% | 137.7 / 13.4% | 持平（官方略低） |
+  - ⚠️ **可比性披露**：数数字组 completion 官方 966 vs 自建 400（自建提前 stop），严格可比应看 completion 相同（=256）的中/英散文两列；散文两组自建接受率（38.8%/51.6%）显著高于官方（3.7%/13.4%）。⇒ **初步 H2 不成立（官方原生并未显著优于自建当前配置）**，与"官方 decode 高纯属数数字语料"的既有判断一致。
+- **待收敛**：① 数数字 completion 差异是否需重跑对齐；② draft 扫描（4/7/12）未做（本次仅用官方 dflash K12 / 自建 MTP K2 现货）；③ KV dtype 对齐（官方 k8v4 vs 自建 k8v4 已一致）。**下一步**：切线回官方 or 继续追 ①②。
+
+**P｜范围边界裁决：自建线=老项目，仅作 S5 对照（2026-10-07 用户明示）**
+- **认知确认**：`J:\Bonsai`（自建线）**就是老项目**，不是新项目的开发对象。S5 只是把它临时拉起来当**对照基线**跑一次同口径 A/B，TELE 未在其上做任何落地/优化。
+- **分工**：老项目的优化由**专门一方在老目录**里做（`J:\Bonsai` 侧），本线（官方线 `J:\Bonsai-Official`）**不掺和、不管理、不优化自建线**。
+- **统一启动器（双线下拉选择）**：用户裁决"**统一以后再说**"——**暂不立项**，不在此线开发双线合并启动器。当前两线仍各自独立启动（官方线 GUI / 自建线 bat）。
+- **后续边界**：官方线后续全部工作（S6 自编、draft 扫描、KV dtype 对比等）**只针对官方线**；若需再以自建线作对照，仅按需临时切线、测完即切回，不作为范围内容。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不是落地批准；所有写操作执行前须用户逐次批准。*
