@@ -45,21 +45,27 @@
 
 官方内置档位表**无 5080**，首次启动的 `calibrating routes` 会花 **10–50s**，**别杀**。
 
-## 目录导航
+## 项目结构（本地 = 库）
 
-| 路径 | 内容 |
-|---|---|
-| `ninfer_launcher.py` / `启动器.bat` | GUI 启动器（参数下拉 + 命令预览 + 起服 + 自检 + 就绪自测 + 命名组合） |
-| `serve_tee.py` | 日志转存工具：引擎 stdout/stderr 实时上色转显 + 全文落盘 `logs\serve_<时间戳>.log`（保 grep 取证） |
-| `start-pq2-dflash.bat` / `start-pq2.bat` / `start-ptq1-mtp.bat` | 官方三档启动器（改路径即用） |
-| `start-pq2-dflash-designc.bat` | 自编 Design C serve 的对照启动器（S6） |
-| `docs\Bonsai-27B-NInfer-kvmem-项目构建史.md` | **完整开发史（过程实录，读它了解全局）** |
-| `docs\教程-KVMem与短测-给agent与使用者.md` | KVMem 机制与短测教程（官方包自带副本） |
-| `docs\官方全库导读【CODE】-20261006.md` | 官方全库导读 |
-| `docs\reports\` | 施工方案 / 交叉审核 / 交接口径等报告 |
-| `engine\`（不入库） | 官方引擎成品 + 运行时 DLL |
-| `models\`（不入库） | 官方三元 v3 模型制品 |
-| `logs\`（不入库） | serve 运行日志（含 `kvmem_score` 检索证据） |
+> 下表 = **本地实际结构**；标 **✅入库** 的随库分发，标 **❌不入库** 的因体积/上游原因忽略（clone 后需自行获取或按 `build/` 复现）。**外人 clone 即懂结构。**
+
+| 路径 | 入库 | 内容 |
+|---|---|---|
+| `ninfer_launcher.py` / `启动器.bat` | ✅ | GUI 启动器（参数下拉 + 命令预览 + 起服 + 自检/就绪自测 + 命名组合 + **「引擎」下拉：官方成品 / 自编 Design C**） |
+| `serve_tee.py` | ✅ | 日志转存（着色 + 精简/全部；全文落盘 `logs\serve_<时间戳>.log`） |
+| `start-pq2-dflash.bat` / `start-pq2.bat` / `start-ptq1-mtp.bat` | ✅ | 官方三档启动器 |
+| `start-pq2-dflash-designc.bat` | ✅ | **自编引擎（Design C）对照启动器** |
+| **`build/`** | ✅ | **自编引擎的构建 / 复现材料**（构建脚本 + 复现说明：依赖、步骤、要改的路径） |
+| `README.md` / `docs/` | ✅ | 项目层文档（构建史 / 报告 / 教程） |
+| `ninfer_launcher_profiles.json` | ✅ | 启动器命名组合（含实跑档） |
+| **`engine/`** | ❌ 体积 | 引擎成品：`ninfer-serve-120a.exe`=**官方成品**；**`self-built/ninfer-serve.exe`=我们自编的引擎（含 Design C）+ 全套运行 DLL** |
+| `models/` | ❌ 体积 | 模型制品 `Ternary-Bonsai-2-27B-ninfer-v3.ninfer` |
+| `official-repo/` | ❌ 上游 | 上游全库 clone（引擎源码，复现输入） |
+| `logs/` | ❌ | 运行日志（含 `kvmem_score` 检索证据） |
+| `.temp/` | ❌ | **仅临时中间物**（草稿 / 一次性脚本 / 日志；**严禁放成果**——见铁律 T-NO-TEMP-WORK） |
+| `_safety_backups/` | ❌ | 备份快照 |
+
+**别人 clone 后怎么用**：① 按 `build/README.md` 复现出**自己的引擎**（或获取 `engine/`、`models/`）；② 在启动器里选「引擎」= 自编 / 官方 → 起服。
 
 ## 关键结论（速览）
 

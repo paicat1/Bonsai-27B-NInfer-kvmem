@@ -421,4 +421,19 @@
 
 ---
 
+## 九、自编引擎 · 产物锚点与复现（2026-10-07）
+
+> 本节把"**我们自己的引擎**"钉死：产物在哪、由哪个源码版本编出、怎么复现、哈希多少——**可核验、可重建**。
+
+- **产物**：`engine\self-built\` —— `ninfer-serve.exe`（**自编，含 Design C**）+ `ninfer.exe` / `ninfer-perplexity.exe` / `ninfer-calibrate.exe` + 运行 DLL（ffmpeg / curl / cudart …）。
+- **源码锚点**：`engine-main` 分支 @ `240fe23`（含本项目补丁：C2326×4 / C3495×2 / C2026 + **Design C**）。
+- **构建 / 复现材料**：`build/` —— 构建脚本（`s6_configure.bat` / `s6_build.bat` …）+ 复现说明（依赖版本、步骤、需改的路径）。
+- **产物清单**：`build\产物清单.md` —— 12 个文件 SHA256（可随时核验产物是否被改 / 损坏）。
+- **构建依赖**：CUDA 13.3 / vcpkg(x64-windows) / VS2022 BuildTools / CMake+Ninja / sm_120a。
+- **复现路径**：按 `build/README.md` 改绝对路径 → `s6_configure.bat` → `s6_build.bat`（target `ninfer-serve`）→ 产物落 `engine\self-built\`。
+- **口径**：产物本体（~4.8 GB）因体积**不入库**；以 **产物清单（哈希）+ 源码锚点（commit）+ 构建脚本 + 依赖版本**锚定 —— **可核验、可重建**。
+- **引擎选择**：启动器「引擎」下拉 = `官方成品` / `自编(Design C)`；预览与启动都用所选引擎。
+
+---
+
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
