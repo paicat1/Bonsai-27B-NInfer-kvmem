@@ -20,3 +20,11 @@ __pycache__/
 
 # 备份快照
 _safety_backups/
+
+# ============================================================
+#  CodeBuddy 工具链（类③工作流工具，不入项目 git）
+#  先例 = LiveTranslate 母本库（smart_push/wm_revert_check/tools 均不跟踪）
+# ============================================================
+smart_push.ps1
+tools/
+.codebuddy/
