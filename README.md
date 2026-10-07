@@ -12,7 +12,7 @@
 
 | | **本仓** `J:\Bonsai-Official` | 姊妹仓 `J:\Bonsai` |
 |---|---|---|
-| **上游给的底子** | NInfer **v0.11.0 + KVMem 环**（`1314521gjy` 融合）+ 沈三殊三元 **v3** 成品包 | **Ambolio** `ninfer-4090-windows`（第三方 4090/sm_89 移植）+ **CraneBW** 内核 |
+| **上游给的底子** | NInfer **v0.11.0 + KVMem 环**（`1314521gjy` 融合）+ 沈三殊三元 **v3** 成品包 | **沈三殊**（三元-Bonsai 论文 + `ada-ternary` 工具链 = **技术起点**）+ **Ambolio** `ninfer-4090-windows`（4090/sm_89 移植）+ **CraneBW** 内核 |
 | **我们的** | **自编引擎**（编译补丁 C2326/C3495/C2026 + **Design C**） | 移植适配 / 改 CMake / 合内核 / 自产 **v2** 制品 |
 | **架构** | 原生 **sm_120a** | 改 CMake `89\|120a` |
 | **预测解码** | dflash2 + **ngram 混合投机** | MTP / DFlash2 |
@@ -133,7 +133,7 @@
 
 本项目站在上游作者肩上落地，致谢：
 
-- **沈三殊（shensanshu）· UP主**：**三元-Bonsai 作者**——发布三元 Bonsai 论文 / 工具链（[`shensanshu/ninfer-ada-ternary`](https://modelscope.cn/models/shensanshu/ninfer-ada-ternary)，ModelScope）**及本仓所用的"三元 Bonsai 成品引擎包"（`infer-engine-sm120a-20261002`）与三元 v3 制品**，是本项目成品包的**发布方**。
+- **沈三殊（shensanshu）· UP主**：**三元-Bonsai 作者**——发布三元 Bonsai 论文 / 工具链（[`shensanshu/ninfer-ada-ternary`](https://modelscope.cn/models/shensanshu/ninfer-ada-ternary)，ModelScope）**及本仓所用的"三元 Bonsai 成品引擎包"（`infer-engine-sm120a-20261002`）与三元 v3 制品**；**也是 `J:\Bonsai` 的技术起点**（三元-Bonsai 论文 + `ada-ternary` 工具链），是**两条线共同的源头**。
 - **Neroued**：NInfer 上游作者（C++20/CUDA）。[`Neroued/ninfer`](https://github.com/Neroued/ninfer)
 - **1314521gjy**：本线引擎血统来源 `ninfer-fusion-kvmem`（NInfer v0.11.0 基座 + KVMem 环融合）。
 - **Ambolio**（`ninfer-4090-windows` 移植树）+ **CraneBW**（三元内核）：姊妹仓 `J:\Bonsai` 的上游底子。
