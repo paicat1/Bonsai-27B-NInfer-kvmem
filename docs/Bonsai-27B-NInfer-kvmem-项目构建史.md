@@ -289,11 +289,12 @@
 - **推送收口（用还原版 smart_push 实测全链路）**：engine-main `1e2ffae..4a1da7c`、main `dd3a418..aff317e` 均 push 成功（smart_push 自动探测 7890 代理不可达 → SSL 握手失败 → 自动降级直连，`=== PUSH OK (direct) ===`）。双分支三查硬证：ls-remote 直连 = 本地哈希一致，status 无 ahead/behind。
 - **收尾动作**：`gate_check.ps1`（③工作流工具）移入 `tools/`（已 gitignore），主仓工作区干净。
 
-**Y｜S6 全量扫错：`ninja -k 0` 零错误通过，ninfer-serve.exe 完整构建（2026-10-07）**
-- **方法**：`ninja -k 0 ninfer-serve -j 16`（`-k 0` 不因单错停止，一次暴露全部错误），vcvars64 环境初始化后跑（裸跑会触发 C1083 找不到 STL）。
-- **结果**：**149/149 步全跑，FAILED=0，退出码 0**；产物 `apps\ninfer-serve.exe`（1.27 GB，2026-10-07 11:23）。
-- **前置教训**：首次裸跑 ninja 未 init vcvars → `C1083: cstddef/array No such file`——**环境问题非代码问题**；脚本化 `cmd /c call vcvars64.bat && ninja -k 0` 后全通。
-- **意义**：S6 自编 120a 引擎**完整构建成功**，3 类补丁（C2326×4 / C3495×2 / C2026×1）在真实全量构建中验证通过。
+**Y｜S6 全图扫错收口：serve 链路先绿，全图 `ninja -k 0` 最终零错误（2026-10-07）**
+- **serve 目标链路（先跑）**：`ninja -k 0 ninfer-serve -j 16`（target 限定，仅扫 serve 依赖闭包）→ **149/149 步全跑，FAILED=0，退出码 0**；产物 `apps\ninfer-serve.exe`（1.24 GB / 2026-10-07 11:23）。**注意：此步只证 serve 链路，非"全量"**。
+- **全图收口（CODE 第 30 轮指正后补跑）**：`ninja -k 0`（**不带 target**，扫全部 build target）→ **28/28 步全过，FAILED=0，error C=0 / error LNK=0 / fatal=0，退出码 0**。calibrate / cli / perplexity / multi-gpu-probe / tp-probe / w4-row-scale-error 等此前未构建边**全部成功**。⇒ **"官方源码全树 MSVC 兼容"声明成立**。
+- **前置教训**：裸跑 ninja 未 init vcvars → `C1083: cstddef/array`（环境问题非代码问题）；脚本化 `cmd /c call vcvars64.bat && ninja -k 0` 后全通。
+- **日志保留**：`build-120a` 下 `.ninja_log` 与后台日志（172KB）保留至 CODE 复核销账，未清除（此前删日志被第 30 轮指正）。
+- **意义**：S6 自编 120a 引擎**全树构建成功**，3 类补丁（C2326×4 / C3495×2 / C2026×1）在真实全量构建中验证通过。
 - **下一步**：产物与官方成品 exe 同探针对照 → 打 Design C 补丁 → 重编 → 思考行为探针。
 
 ---
