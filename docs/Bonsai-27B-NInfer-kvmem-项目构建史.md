@@ -289,6 +289,13 @@
 - **推送收口（用还原版 smart_push 实测全链路）**：engine-main `1e2ffae..4a1da7c`、main `dd3a418..aff317e` 均 push 成功（smart_push 自动探测 7890 代理不可达 → SSL 握手失败 → 自动降级直连，`=== PUSH OK (direct) ===`）。双分支三查硬证：ls-remote 直连 = 本地哈希一致，status 无 ahead/behind。
 - **收尾动作**：`gate_check.ps1`（③工作流工具）移入 `tools/`（已 gitignore），主仓工作区干净。
 
+**Y｜S6 全量扫错：`ninja -k 0` 零错误通过，ninfer-serve.exe 完整构建（2026-10-07）**
+- **方法**：`ninja -k 0 ninfer-serve -j 16`（`-k 0` 不因单错停止，一次暴露全部错误），vcvars64 环境初始化后跑（裸跑会触发 C1083 找不到 STL）。
+- **结果**：**149/149 步全跑，FAILED=0，退出码 0**；产物 `apps\ninfer-serve.exe`（1.27 GB，2026-10-07 11:23）。
+- **前置教训**：首次裸跑 ninja 未 init vcvars → `C1083: cstddef/array No such file`——**环境问题非代码问题**；脚本化 `cmd /c call vcvars64.bat && ninja -k 0` 后全通。
+- **意义**：S6 自编 120a 引擎**完整构建成功**，3 类补丁（C2326×4 / C3495×2 / C2026×1）在真实全量构建中验证通过。
+- **下一步**：产物与官方成品 exe 同探针对照 → 打 Design C 补丁 → 重编 → 思考行为探针。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
