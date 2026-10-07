@@ -252,6 +252,35 @@
 - **S5 红线落地**：A/B 每发必须核日志 cache 列，`cache>0` 读数作废（同文重发 TTFT 假快：大 prompt 下可从秒级降到百毫秒级）。此规则已并入 `engine-ab-benchmarking` 技能。**G16 ✅ 收敛闭环。**
 - **G 挂账最新**：G10（MTP 备用档）长期在账；G11–G18 已闭环（G18 为官方硬件口径澄清，见 §8-Q）。
 
+**T｜S6 自编 120a 探索实录：环境就绪 + 配置成功 + 引擎编译阻塞（2026-10-07）**
+- **S6 范围（施工方案 §S6）**：从官方源码 `src-tree/fusion-engine-src/` 自编原生 120a（`-DCMAKE_CUDA_ARCHITECTURES=120a` + `-DNINFER_SM120_NATIVE=ON`），用于治"每步成本 1.92×"病根（H2 相关）；必打方案 C 补丁（思考空正文）。
+- **环境核查**：CUDA 13.3 ✅ `J:\Bonsai\landing\cuda-13.3`；VS BuildTools 2022 ✅ 实际在 `j:\Microsoft Visual Studio\2022\BuildTools`（非 C 盘，初查漏）；cl 14.43；CMake 3.31.6；Ninja ✅；驱动 616.92 ≥580 ✅。
+- **vcpkg 安装**：clone 浅库 → 需 `git fetch --unshallow`（修 baseline commit 缺失）→ bootstrap。`vcpkg install curl ffmpeg[zlib] pkgconf` 编译 ffmpeg 9.0.2（约 26 分钟，成功但冗余）。
+- **CMake 配置 120a**：改后台 + 清 buildtrees 残留 → 配置成功（`CONFIGURE_EXIT=0`）。manifest 用 builtin-baseline 钉 ffmpeg n8.1.2（与 9.0.2 版本冗余，非错误）。
+- **引擎编译阻塞**：`ninfer-serve -j 16` 在 259/1062 步失败：`nvfp4_a4_tma.cuh(444): error C2326: lambda 无法访问 "kernel"`（MSVC 对 lambda 捕获 `constexpr __global__` 函数指针的限制）。触发点：`CMakeLists.txt:49` 无条件定义 `NINFER_TMA_STAGED_DESCRIPTORS`。
+- **定性**：官方源码的 Windows + sm_120a 组合属**未验证路径**（官方主产物 3090/sm_86），bug 是编译工具链兼容问题，非配置错误。
+
+**U｜第 15 轮复核：S6 方向修正 —— "compat 绕开 C2326"不成立（2026-10-07）**
+- **TELE 独立复核（源码级取证）**：`src/ops/CMakeLists.txt` L52-53 的 NVFP4 过滤被 `if(NOT CMAKE_CUDA_ARCHITECTURES STREQUAL "120a")` 包裹 —— 仅非 120a 才过滤 nvfp4 源。我们编 `120a`，故选 compat 路径不会过滤 `nvfp4_a4_tma.cuh` ⇒ **C2326 在 compat 下照样触发**。
+- **修正结论**：① S6 自编无论 compat/native 都撞 C2326，唯一能编过 = 改源码打补丁（架构级写操作）；② S6 核心价值 = 打 Design C 补丁（思考空正文，官方成品 exe 没有）+ 可选 native 实验；③ 若只要官方等效能力，官方成品 exe 已具备（compat，性能已验证）。
+
+**V｜第 16-20 轮：S6 C2326 全量普查 + A 类 4 处补丁 + C3495 分类修复实录（2026-10-07）**
+- **C2326 全量普查**：全库 grep `constexpr auto kernel` 定位 18 处/12 文件，逐点判定**非全部命中**（判定标准 = kernel 是否被内层 lambda 捕获）。A 类 4 处真触发；B 类 13 处安全（launch 泛型 lambda 内定义 9 处、顶层函数 2 处、顶层 launch 2 处）；nvfp4_a4_tma 1 处已改。
+- **A 类 4 处补丁**（批准，按 (b) 保留外层 `kernel` + 回调内写完整模板实例）：fp8/bf16/nvfp4 三个 `template_launch.cuh` 的 sliced-k 回调 + bf16 gemv 的 configure 回调。模板实参/grid/block/shared/参数列表逐字节不变；`NOTE(S6 patch)` 注释；B 类 13 处不动。备份 `_safety_backups\s6_patch\*_pre_C2326fix.cuh`。编译越过全部 C2326 点。
+- **C3495 普查**：34 个 configure 调用点，唯一真触发 = `gdn_gating_proj/bf16/bf16_gdn_gating_proj_kernels.cu:300`（外层泛型 lambda 内 `constexpr bool FullTokens` 被内层 `[&]` 回调捕获作模板实参）。其余 33 处安全。
+- **第 18 轮 CODE 认错**：gdn C3495 首修"泛型 lambda + `.template operator()<…>()`"配方本身有误（helper 只无参调用）→ 改 `if constexpr` 双分支 + `[]` 空捕获字面量特化，落盘验证通过。
+- **MSVC 规避写法清单**：✅① 回调内不引用外层 constexpr 局部（if constexpr 分支+字面量特化、`[]` 空捕获）；② constexpr 上提为函数模板形参后直接引用；③ `template <auto Kernel>` 助手。❌ 泛型 lambda 经 configure helper 传入；❌ 运行时拷贝 constexpr 局部当模板实参。
+
+**W｜S6 补丁批收尾：C3495 根除 + C2026 修复 + engine-main 分支落地（2026-10-07）**
+- **small_t_i8 C3495 修复**：`small_t_i8_launch.cuh:52` 外层泛型 lambda 内 `constexpr kDynamicBytes` 被内层 `issue_pv` 回调 `[&]` 捕获作普通实参。批准方案：configure 回调内联 `static_cast<int>(4*KeyBlock*kCausalHeadDim)` + 内核 launch 行用 `DynamicArena ? size_t(4*KeyBlock*kCausalHeadDim) : 0u` 常量表达式 + **删死变量** + 注释改写。落盘后 grep `kDynamicBytes` 复核 = 代码引用 0、注释说明 1。重编 small_t_i8 全部实例通过，C3495 **类别根除**。
+- **C2026（第三类）**：`device_profiles_builtin.cpp` 报 `error C2026: 字符串太大，已截断尾部字符`。根因：官方模板 `.cpp.in` 用单个 raw string 字面量嵌整个 `device_profiles.json`（30,566 字符），超 MSVC 单字面量上限 16,380。
+  - **修复**：CMake 侧将 JSON 按 16000/段切，段间插 `)ninfer_json" R"ninfer_json(`（raw string 相邻拼接，C++11 翻译阶段 6），模板零改动、内容零转义、逐字节不变。
+  - **验证三步**：① 探针编译通过；② 生成文件 2 段（16000+14566）拼接后 30566 **BYTE_IDENTICAL=True**；③ 单编 `ninfer_runtime_support` → `ninfer_runtime_support.lib` 链接成功 `BUILD_EXIT=0`。
+  - **全载体排查**：全 src-tree 唯一带 `@VAR@` 嵌入的 `.in` 模板 = device_profiles_builtin.cpp.in，此类已穷尽。
+- **engine-main 分支落地（本项目首次）**：新项目照旧项目 `J:\Bonsai` 的两分支一体模式，新建 `engine-main` 分支承载官方 NInfer v0.11.0 源码 + 3 类编译补丁（71.6MB/2433 文件，可复现构建），`main` 分支保持项目文档层。首提交 `feat(engine): 官方 NInfer v0.11.0 源码 + 3 类 MSVC 编译兼容补丁`。
+- **三类汇总**：C2326（4 处）、C3495（2 处）、C2026（1 处生成模板）均已修复并验证；补丁已随 `engine-main` 分支入库，**私有库 `paicat1/Bonsai-27B-NInfer-kvmem` 可复现构建**。
+- **备份**：`_safety_backups\s6_patch\`（各 `_pre_*fix` + `src_runtime_CMakeLists_pre_C2026fix.txt` + `gitignore_main_pre_engine-main.txt`）。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不是落地批准；所有写操作执行前须用户逐次批准。*
