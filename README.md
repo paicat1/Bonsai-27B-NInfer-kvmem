@@ -1,7 +1,7 @@
 # Bonsai-27B-NInfer-kvmem — 三元 Bonsai 27B 本地推理工程
 
 > 在 **RTX 5080（16GB，sm_120a）** 上，把 **Bonsai-2-27B 三元量化模型** 跑起来——**并编译出本引擎（含思考区收尾补丁）与运行环境**。
-> **官方成品是底子；"自编引擎 + 运行环境"是本项目的成果。**
+> **官方成品是底子；"自编译引擎 + 运行环境"是本项目的成果。**
 > 私有库：`paicat1/Bonsai-27B-NInfer-kvmem`（**非官方发布方**；名字里的 "kvmem" 表示本线血统）。
 
 ---
@@ -13,7 +13,7 @@
 | 维度 | **本仓** [`paicat1/Bonsai-27B-NInfer-kvmem`](https://github.com/paicat1/Bonsai-27B-NInfer-kvmem) | **姊妹仓** [`paicat1/Bonsai-27B-NInfer`](https://github.com/paicat1/Bonsai-27B-NInfer) |
 |---|---|---|
 | **上游给的底子** | NInfer **v0.11.0 + KVMem 环**（`1314521gjy` 融合）+ 沈三殊三元 **v3** 成品包 | **沈三殊**（三元-Bonsai 论文 + `ada-ternary` 工具链 = **技术起点**）+ **Ambolio** `ninfer-4090-windows`（4090/sm_89 移植）+ **CraneBW** 内核 |
-| **我们的** | **自编引擎**（MSVC 编译兼容 ×7 + **思考区收尾补丁**） | 移植适配 / 改 CMake / 合内核 / 自产 **v2** 制品 |
+| **我们的** | **5080 自编译引擎**（MSVC 编译兼容 ×7 + **思考区收尾补丁**） | 移植适配 / 改 CMake / 合内核 / 自产 **v2** 制品 |
 | **架构** | 原生 **sm_120a** | 改 CMake `89\|120a` |
 | **KV / 显存机制** | **KVMem 环**：显存小池 + 主机内存卸载，`--kv-capacity` 可**小于**上下文；KV 精度多档（`k8v4`/`nvfp4`/`rk*`/`fp8`/`bf16`…） | Device/Host **双层 KV**（被动容量）；精度档 `fp8`/`bf16`/`k8v4`/`nvfp4` |
 | **长上下文** | **内容打分主动检索**（KVMem 环） | 被动容量（无检索） |
@@ -37,7 +37,7 @@
 | SHA256 | `65E3A264E456A2207C05DCAC5FA5C690F3DA3840C664E9EADD5287BD283D68BA`（`ninfer-serve.exe`） |
 | 源码锚点 | `engine-main` 分支 @ `240fe23`（含补丁：MSVC 编译兼容 ×7 + **思考区收尾补丁**） |
 | 复现材料 | `build/`（构建脚本 + 复现说明）；产物清单：`build/产物清单.md`（12 文件 SHA256） |
-| 怎么用 | 启动器「**引擎**」下拉 = **自编** / 官方成品 → 起服 |
+| 怎么用 | 启动器「**引擎**」下拉 = **自编译** / 官方成品 → 起服 |
 
 > **思考区收尾补丁**治的是官方成品没有的能力：模型在思考区 `stop` 时**空正文**（思考没闭合）——该补丁强制走进正文区。
 
@@ -49,18 +49,18 @@
 | **`engine-main`** | **引擎层** | NInfer v0.11.0（+ KVMem 环）源码 + 本项目补丁（**可复现构建**） |
 
 - 要看**引擎代码、改了哪些补丁、怎么重编** → 切到 `engine-main`，读它的 `README.md`。
-- 要看**项目怎么跑起来、自编引擎在哪、历史/报告** → 留在 `main`。
+- 要看**项目怎么跑起来、自编译引擎在哪、历史/报告** → 留在 `main`。
 
-> 引擎成品（~1.27 GB 级二进制）、模型制品、上游全库 clone **不入库**（体积 / 上游内容，见 `.gitignore`）；**自编引擎靠 `build/` 复现 + `build\产物清单.md` 哈希锚定**。
+> 引擎成品（~1.27 GB 级二进制）、模型制品、上游全库 clone **不入库**（体积 / 上游内容，见 `.gitignore`）；**自编译引擎靠 `build/` 复现 + `build\产物清单.md` 哈希锚定**。
 
 ## 四、快速上手（起服）
 
-1. **GUI 启动器**：运行 `ninfer_launcher.py`（或双击 `启动器.bat`）——下拉配置参数，右侧实时预览命令，一键起服（**新控制台窗口，关窗 = 停服**）；可「环境自检」「就绪自测」；含命名组合 + 场景预设；顶部有 **「引擎」下拉：官方成品 / 自编**。
+1. **GUI 启动器**：运行 `ninfer_launcher.py`（或双击 `启动器.bat`）——下拉配置参数，右侧实时预览命令，一键起服（**新控制台窗口，关窗 = 停服**）；可「环境自检」「就绪自测」；含命名组合 + 场景预设；顶部有 **「引擎」下拉：官方成品 / 自编译**。
 2. **启动脚本**：
    - 官方引擎：`start-pq2-dflash.bat`（端口 8094）/ `start-pq2.bat`（8091）/ `start-ptq1-mtp.bat`（8095）；
-   - **自编引擎**：`start-pq2-dflash-designc.bat`。
+   - **自编译引擎**：`start-pq2-dflash-designc.bat`。
 3. **手动**：
-   - 自编：`engine/self-built/ninfer-serve.exe models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer --host 127.0.0.1 --port 8094 ...`
+   - 自编译：`engine/self-built/ninfer-serve.exe models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer --host 127.0.0.1 --port 8094 ...`
    - 官方：`engine/ninfer-serve-120a.exe models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer --host 127.0.0.1 --port 8094 ...`
 
 > ⚠️ **启动 serve 后，运行它的控制台窗口就是服务本体——关闭窗口即停止服务。**
@@ -80,11 +80,11 @@
 
 | 路径 | 入库 | 内容 |
 |---|---|---|
-| `ninfer_launcher.py` / `启动器.bat` | ✅ | GUI 启动器（参数下拉 + 命令预览 + 起服 + 自检/就绪自测 + 命名组合 + **「引擎」下拉：官方 / 自编**） |
+| `ninfer_launcher.py` / `启动器.bat` | ✅ | GUI 启动器（参数下拉 + 命令预览 + 起服 + 自检/就绪自测 + 命名组合 + **「引擎」下拉：官方 / 自编译**） |
 | `serve_tee.py` | ✅ | 日志转存（着色 + 精简/全部；全文落盘 `logs/serve_<时间戳>.log`） |
 | `start-pq2-dflash.bat` / `start-pq2.bat` / `start-ptq1-mtp.bat` | ✅ | **官方引擎**三档启动器 |
-| `start-pq2-dflash-designc.bat` | ✅ | **自编引擎**启动器 |
-| **`build/`** | ✅ | **自编引擎的构建 / 复现材料**（构建脚本 + 复现说明 + 产物清单） |
+| `start-pq2-dflash-designc.bat` | ✅ | **自编译引擎**启动器 |
+| **`build/`** | ✅ | **自编译引擎的构建 / 复现材料**（构建脚本 + 复现说明 + 产物清单） |
 | `README.md` / `docs/` | ✅ | 项目层文档（构建史 / 报告 / 教程 / 截图） |
 | `ninfer_launcher_profiles.json` | ✅ | 启动器命名组合（含实跑档） |
 | **`engine/`** | ❌ 体积 | 引擎成品：**`self-built/ninfer-serve.exe` = 本引擎（含思考区收尾补丁）**；`ninfer-serve-120a.exe` = 官方成品（对照）。均配全套运行 DLL |
@@ -94,7 +94,7 @@
 | `.temp/` | ❌ | 临时中间物（草稿 / 一次性脚本 / 日志），不入库 |
 | `_safety_backups/` | ❌ | 备份快照 |
 
-**上手**：① 按 `build/README.md` 复现引擎（或自备 `engine/`、`models/`）；② 启动器里选「引擎」= 自编 / 官方 → 起服。
+**上手**：① 按 `build/README.md` 复现引擎（或自备 `engine/`、`models/`）；② 启动器里选「引擎」= 自编译 / 官方 → 起服。
 
 ## 六、关键结论（速览）
 
@@ -102,7 +102,7 @@
 
 | 项 | 值 |
 |---|---|
-| **自编引擎** | `engine/self-built/ninfer-serve.exe` = **`65E3A264…`** / ~1.27 GB（**含思考区收尾补丁**） |
+| **自编译引擎** | `engine/self-built/ninfer-serve.exe` = **`65E3A264…`** / ~1.27 GB（**含思考区收尾补丁**） |
 | 官方引擎 | `engine/ninfer-serve-120a.exe` = `E3E0486A…` / 1,329,240,576 B（对照用；与上游 Release 同源） |
 | 模型 | `models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer` = **9,520,051,456 B** / SHA256 `CDC4810B0FF17C40D0F62CF214B6E0BCD08346E9EB05CA53371507037793C14A` |
 | 上下文 / KV 池 | 官方默认 **262144（256K）** / **17920** token（设备池） |
@@ -122,7 +122,7 @@
 - **长文检索验证**：正文埋针 + **问句独立成回合** ⇒ 问句 span ≤ `MAXQ=256` ⇒ 打分真跑（`scored_kept>0`）、针被答出、kept 覆盖针位。
 - **同口径 A/B（数数字 / 中文散文 / 英文散文）**：同一 dflash 档下，数数字接受率 **91.5%** 而散文骤降到 **3.7%（中）/ 13.4%（英）** ⇒ "decode 高"**仅对数数字语料成立**；差距本质是**语料效应**（接受率是强内容依赖指标，不能用合成填充文本测）。
 - **A/B 结论**：同语料同 draft 口径下，本仓原生**并未显著优于**姊妹仓当前配置（散文两组对方反超）。
-- **自编译引擎（sm_120a）**：源码**全树 MSVC 构建成功**（3 类编译补丁）+ **思考区收尾补丁**——双 exe 对照实测：**自编 serve 的思考预算生效（稳定输出正文），官方成品不解析该字段**。
+- **自编译引擎（sm_120a）**：源码**全树 MSVC 构建成功**（3 类编译补丁）+ **思考区收尾补丁**——双 exe 对照实测：**自编译 serve 的思考预算生效（稳定输出正文），官方成品不解析该字段**。
 - **真实负载实跑（2026-10-07，19 请求，32 工具对话）**：档位 **dflash2 K=7 + 思考预算 16000**，KV 163,840 **全驻显存**（free 0.84 GiB）。**瞬时峰值 decode 748.6 tok/s**；请求级 decode 180–655、**mixed speculation 接受率 35.7–94.4%**（长输出 ngram 命中 ≈98%）；续写缓存 99.9–100%、TTFT 0.18–0.29 s。⇒ 真实负载同样能跑高——**关键在 K=7 + ngram 混合投机**。
 - **预填充极值 3,820 tok/s**（2026-10-07 配置 `--kv-dtype nvfp4 --max-context 229376`，KV 全驻）：`req#2 done | prompt 8,979 | prefill 3.82k tok/s` —— 全区间最高。
 
