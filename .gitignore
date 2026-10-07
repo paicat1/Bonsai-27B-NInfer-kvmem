@@ -88,30 +88,3 @@ repro/
 
 # WebUI releases unpacked by scripts/fetch-webui.sh for -DNINFER_WEBUI_DIR.
 third_party/webui/
-
-# ============================================================
-#  Bonsai-27B-NInfer-kvmem / engine-main 分支（引擎层）追加
-#  本分支 = 官方引擎源码 + fork 编译补丁（可复现构建）。
-#  运行产物 / 引擎 exe / 权重 / 上游 clone 均不入库（同 main 分支设计）。
-# ============================================================
-# 引擎运行产物（本地已装 exe/dll/lib）
-*.exe
-*.dll
-*.lib
-*.exp
-*.pdb
-*.ilk
-engine/
-ffmpeg/
-ffmpeg_temp/
-*.ninfer
-
-# 上游全库 clone（独立版本线）
-official-repo/
-
-# 本地运行日志 / 临时
-logs/
-.temp/
-_safety_backups/
-__pycache__/
-*.log
