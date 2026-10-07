@@ -50,5 +50,37 @@
     "conc": "1",
     "preserve": "on",
     "hemostat": "on"
+  },
+  "160K K8V4 开视觉": {
+    "spec": "d7",
+    "kv": "k8v4",
+    "ctx": "160k",
+    "kvcap": "160k",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "medium",
+    "tb": "16000",
+    "maxout": "32768",
+    "vision": "on",
+    "sample": "shipped",
+    "conc": "1",
+    "preserve": "on",
+    "hemostat": "on"
+  },
+  "150K K8V4 开视觉": {
+    "spec": "d7",
+    "kv": "k8v4",
+    "ctx": "150k",
+    "kvcap": "150k",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "medium",
+    "tb": "16000",
+    "maxout": "32768",
+    "vision": "on",
+    "sample": "shipped",
+    "conc": "1",
+    "preserve": "on",
+    "hemostat": "on"
   }
 }

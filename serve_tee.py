@@ -33,14 +33,25 @@ def is_kept_noise(line):
     return line.startswith("kvmem_score: KEPT")
 
 
+def is_select(line):
+    """判定是否为 KVMem SELECT 决策行（`kvmem_score: SELECT ...`）。精简模式下只留每段首末条。"""
+    return line.startswith("kvmem_score: SELECT")
+
+
+def is_harvest_note(line):
+    """KVMem harvest 告警行（`[ninfer] kvmem harvest: ...`，chunk 未进索引）。
+    精简模式下与 SELECT 同段处理，**不打断**首末压缩。"""
+    return line.startswith("[ninfer] kvmem harvest:")
+
+
 def colorize(line):
     """给日志行中的关键数据上色：decode数值(绿)、接受率%(红)、prefill数值(黄)。
     直接输出 ANSI/VT 色码 —— 本终端原生支持，无需 colorama。"""
     # decode 数值 -> 绿："decode 129.6 tok/s"
     line = re.sub(r"(decode )(\d+(?:\.\d+)?)( tok/s)",
                   lambda m: m.group(1) + C_GREEN + m.group(2) + C_RESET + m.group(3), line)
-    # 接受率（mtp / dflash2 accepted）-> 红："(83.0%)"
-    line = re.sub(r"((?:mtp|dflash2) accepted[^()]*\()(\d+(?:\.\d+)?%)\)",
+    # 接受率（任意 "… accepted … (N%)"，如 mixed speculation / mtp / dflash2）-> 红
+    line = re.sub(r"(accepted[^()]*\()(\d+(?:\.\d+)?%)\)",
                   lambda m: m.group(1) + C_RED + m.group(2) + C_RESET + ")", line)
     # prefill 数值 -> 黄："prefill 1.43k tok/s" / "prefill 146.7 tok/s"
     line = re.sub(r"(prefill )([\d.]+k?)( tok/s)",
@@ -54,6 +65,12 @@ def main(argv):
         return 2
     logfile = argv[1]
     cmd = argv[2:]
+    # 窗口显示模式（环境变量 SERVE_TEE_MODE，由启动器注入）：slim=精简 / full=全部（查错）
+    #   slim：KEPT 刷屏行隐藏；SELECT 只保留**每段首条+末条**；业务行全显。
+    #   full：不过滤，全部显示。**两种模式日志文件都全文落盘**（保 grep 取证）。
+    mode = os.environ.get("SERVE_TEE_MODE", "slim").strip().lower()
+    if mode not in ("slim", "full"):
+        mode = "slim"
     d = os.path.dirname(logfile)
     if d:
         os.makedirs(d, exist_ok=True)
@@ -74,24 +91,47 @@ def main(argv):
         log.close()
         return 1
 
+    def emit(text):
+        """窗口显示一行（上色后）。"""
+        try:
+            sys.stdout.buffer.write(colorize(text).encode("utf-8", "replace"))
+            sys.stdout.buffer.flush()
+        except Exception:
+            pass
+
+    sel_buf = []
+
+    def flush_sel():
+        """把本段连续 SELECT 的**首条+末条**打到窗口，中间重复的丢弃（精简模式）。"""
+        if not sel_buf:
+            return
+        emit(sel_buf[0])
+        if len(sel_buf) > 1:
+            emit(sel_buf[-1])
+        sel_buf.clear()
+
     out = proc.stdout
     while True:
         raw = out.readline()
         if not raw:
             break
         text = raw.decode("utf-8", "replace")
-        # 窗口显示：KEPT 刷屏行只在窗口过滤（日志文件仍全文写盘，保 grep）
-        if not is_kept_noise(text):
-            try:
-                colored = colorize(text).encode("utf-8", "replace")
-                sys.stdout.buffer.write(colored)
-                sys.stdout.buffer.flush()
-            except Exception:
-                pass
+        if mode == "full":
+            emit(text)                       # 全部：不过滤
+        else:                                # 精简
+            if is_kept_noise(text):
+                pass                         # KEPT 刷屏行：窗口隐藏
+            elif is_select(text) or is_harvest_note(text):
+                sel_buf.append(text)         # SELECT / harvest 告警：同段攒着，段末只留首末
+            else:
+                flush_sel()
+                emit(text)
         try:
-            log.write(raw)  # 日志文件始终原文（不带色，保 grep 取证）
+            log.write(raw)  # 日志文件始终原文全文（不带色，保 grep 取证）
         except Exception:
             pass
+    if mode == "slim":
+        flush_sel()  # 收尾最后一段
 
     code = proc.wait()
     tail = ("===== serve_tee end (exit={}) {} =====\n".format(

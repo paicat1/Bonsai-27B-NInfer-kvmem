@@ -417,6 +417,7 @@ class LauncherApp:
         self.var = {}
         self._label2key = {}
         self.port_var = tk.StringVar(value=str(PORT_DEFAULT))
+        self.logmode_var = tk.StringVar(value="精简")
         # 投机档两级联动：类型 + K 值（照老项目；初值由 DEFAULTS["spec"] 解析）
         _d = DEFAULTS["spec"]
         if _d == "k0":
@@ -448,6 +449,13 @@ class LauncherApp:
         self.port_entry.pack(side="left", padx=(4, 0))
         tk.Label(portrow, text="（官方默认 8094）", bg=self.bg, fg="#9b8c5a",
                  font=("Microsoft YaHei UI", 9)).pack(side="left", padx=(6, 0))
+        # 日志显示模式（传给 serve_tee 窗口；日志文件两种模式都全文落盘）
+        tk.Label(portrow, text="日志:", bg=self.bg, fg="#2b3a6b",
+                 font=("Microsoft YaHei UI", 10)).pack(side="left", padx=(16, 0))
+        self.logmode_cb = ttk.Combobox(portrow, state="readonly", width=6, textvariable=self.logmode_var,
+                                       values=["精简", "全部"], font=("Microsoft YaHei UI", 9))
+        self.logmode_cb.pack(side="left", padx=(4, 0))
+        ToolTip(self.logmode_cb, "窗口日志显示：精简=只留每段 SELECT 首末条 + 业务行（KEPT 隐藏）；全部=不过滤（查错用）。日志文件两种模式都全文落盘。")
 
         # 左：参数区（可滚动）
         left_outer = tk.Frame(main, bg=self.bg)
@@ -704,8 +712,10 @@ class LauncherApp:
         try:
             CREATE_NEW_CONSOLE = 0x00000010
             logfile = os.path.join(LOG_DIR, "serve_" + time.strftime("%Y%m%d_%H%M%S") + ".log")
+            env = env_for_launch()
+            env["SERVE_TEE_MODE"] = "full" if self.logmode_var.get() == "全部" else "slim"
             subprocess.Popen([PYTHON_EXE, TEE_SCRIPT, logfile, exe] + argv,
-                             env=env_for_launch(), cwd=ROOT,
+                             env=env, cwd=ROOT,
                              creationflags=CREATE_NEW_CONSOLE)
             self.status.config(text="✓ 已启动（控制台窗口 + 日志落盘）—— 关窗即停；首次见 calibrating routes 请勿杀\n"
                                     "   日志：" + logfile, fg="#4a6b4a")
