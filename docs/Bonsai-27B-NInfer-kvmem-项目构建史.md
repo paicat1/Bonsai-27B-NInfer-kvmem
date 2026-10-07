@@ -360,6 +360,63 @@
   - **不抄项（甄别）**：老项目 MODEL / BUILD / PREFILL 内核选项、端口写死 18787、`kvcap<ctx` 报错——**官方线不适用**（官方线 kvcap 可<ctx 是 KVMem 特性）；保留本项目更优项：端口可改 / 环境自检 / 就绪自测 / KVMem 五 env 注入 / hemostat 维度。
   - **自证**：`py_compile exit=0`；回归自测 **23 项全过**（存→改乱→载→14 维全对 / 旧值迁移 / 场景预设 6 项 / build_command 回退 / 持久化）。备份 `_safety_backups\ninfer_launcher_20261007_profilefix_pre.py` + `..._align_pre.py`。
 
+- **A3｜实跑验收：真实工具负载 19 请求（2026-10-07 16:35 起，serve 仍运行中）**
+  > ⚠️ **口径纪律**：本段对应 serve **仍在运行**，日志未收尾 ⇒ 聚合统计残缺（"进行中的日志一律不报"）。故本节只记**单请求级 / 5s 窗口瞬时**读数，**不报均值或总计**。
+  - **起服配置**（`logs\serve_20261007_163541.log` 头 CMD 行）：`--max-context 163840 --kv-capacity 163840 --kv-dtype k8v4 --host-kv-mib 16384 --prefill-chunk 1024 --spec dflash2 --draft-tokens 7 --lm-head-draft --vision --default-max-tokens 32768 --default-reasoning-effort medium --default-thinking-budget 16000 --max-concurrency 1 --preserve-thinking --max-shared-prefixes 0 --presence-penalty 0 --temperature 0.7 --top-p 0.9 --top-k 20 --kv-lease-growth --recover-invariant-failures`
+    - 要点：**dflash2 K=7**（官方推荐档，**非 d12**）+ **思考 medium / budget 16000** + **preserve-thinking** + 视觉开。
+  - **装载 / 容量**：`[EVIDENCE]` `logs\serve_20261007_163541.log`：`capacity | KV 163,840 tokens, k8v4, explicit | pages 2,560/2,560 | runtime 6.13 GiB | free 836.7 MiB`（KV **全驻显存**）；`host state pinned 1.46 GiB` + `host KV pinned 16.0 GiB`；`engine ready | total 6.0s | weights 8.43 GiB / 4.7s / 1.79 GiB/s`。
+  - **瞬时峰值**：`[EVIDENCE]` `16:38:27 throughput | 5.0s | decode 748.6 tok/s (3,747 tok) | running 1 (decode-ready 1) | batch 1.00 | host 97.5% (4.9s)`。次高：`725.1 / 712.4 / 702.4 / 696 / 683.0 / 666.6 tok/s`。**远超官方验收 571.9**（后者为数数字语料条件）。
+  - **请求级读数（真实工具对话；每请求 tool calls 1、tools 32）**：
+    - `[EVIDENCE]` `req#7 done | prompt 30,956 | output 16,121 | prefill 2.44k tok/s | decode 655.4 tok/s | mixed speculation accepted 14,959/15,854 (94.4%) | ngram 14,539/14,825 accepted, 989 rounds`
+    - `[EVIDENCE]` `req#13 done | prompt 42,900 | output 16,811 | cache 42,881 (100.0%) | decode 618.6 tok/s | mixed speculation accepted 15,575/16,601 (93.8%) | ngram 15,015/15,236 accepted`
+    - `[EVIDENCE]` `req#19 done | prompt 44,484 | output 16,666 | cache 99.9% | decode 523.0 tok/s | mixed speculation accepted 15,418/16,686 (92.4%)`
+    - `[EVIDENCE]` `req#1 done | prompt 36,643 | output 16,168 | TTFT 15.2s | prefill 2.43k tok/s | decode 399.4 tok/s | mixed speculation accepted 14,044/20,871 (67.3%) | thinking 16,000/16,000, control 25`
+    - `[EVIDENCE]` `req#17 done | prompt 37,227 | output 7,095 | cache 75.2% | decode 288.1 tok/s | mixed speculation accepted 5,869/10,509 (55.8%)`
+    - 短续写（缓存命中）：`req#18 | prompt 44,371 | cache 99.9% | TTFT 292 ms | total 718 ms`；`req#3 | cache 100% | decode 326.8 tok/s`。
+  - **关键洞察（修正 §N/§R 的"dflash 真实语料接受率仅 ~22.7%"结论）**：
+    - 差异根源 = **档位 + 投机模式**：旧观测（22.7%）是 **dflash2 `d12`**，且是**纯 dflash2**计数；本次是 **dflash2 `K=7` + ngram 混合投机**（日志字段 `mixed speculation`, 并带 `ngram N/M accepted`）⇒ 接受率 **35.7%–94.4%**，长输出段 ngram 命中率极高（req#7: 14,539/14,825 ≈ **98%**）。
+    - 与官方"**DFlash2 K≥10 断崖**、K=7 甜点"**逐字吻合** —— K=7 **优于** K=12。
+    - **思考预算生效**：`thinking 16,000/16,000, control 25` = 思考被 budget 压满且正常进正文（Design C 目标达成，见 A2-1）。
+    - **KV 缓存复用极高**：多数续写 `cache 99.9–100% (private endpoint)`，`TTFT 181–292 ms`。
+    - `host 97%`（decode 期间）：主机内存搬运接近打满，是当前吞吐的量级信号。
+    - **结论**：真实工具负载下 decode 能到 **748 峰值 / 500–655 请求级**，**关键在 K=7 + 混合投机**（非"只能数数字才快"）。
+
+- **A4｜引擎挂起（hang）事件：req#30 长 prefill 中途卡死（2026-10-07 16:47，**新现象**）**
+  > ⚠️ 与既往"部分请求触发断言 → **崩溃退出**"（§N / G15 等）**不同**：本次引擎**不崩、不退、永久挂起**（死等）。
+  - **现象**：`logs\serve_20261007_163541.log` 于 `16:47:37` 后**停写**（现场确认 **>12 分钟 0 字节增长**）；`req#30`（`16:47:19 started`：10 messages / 32 tools / thinking medium budget 16000）**从未 done**；最后业务行 `[EVIDENCE]` `16:47:32 throughput | 5.0s | prefill 1.84k tok/s (9,216 tok) | running 1 (prefill 1)` —— 卡在 **prefill 中途**。
+  - **进程实况（`[EVIDENCE]` 现场采样 16:59）**：
+    - `ninfer-serve-120a.exe` PID 4144 **存活**（47 线程、WS ~1.2 GB），但 **CPU 5 秒增量 = 0.00s**（累计停在 521s）⇒ **完全没在算**；
+    - `nvidia-smi`：`utilization 16% → 12%`（闲）、`memory.used 15828 / 16303 MiB`（**剩 ~470 MB**，临界）；
+    - 日志**无** `error / panic / abort / exception / OOM` 关键字；**系统事件日志无** nvidia / CUDA / TDR（4101）/ OOM 记录。
+  - **客户端表现**：`pi-ai stream idle timeout after 300000ms`（等 300 秒零字节判超时）、"深度求索中 用时 5 分 26 秒" ⇒ 印证**服务端不吐数据 = 引擎 hang**，**不是网络断联**。
+  - **定性（OOM vs 死锁，逐条对照）**：
+    | 判据 | 典型显存 OOM / 超售 | 实测 | 结论 |
+    |---|---|---|---|
+    | 报错日志 | 常有 OOM / CUDA error | **无** | 非 OOM |
+    | 系统事件 | 常有 nvlddmkm / TDR | **无** | 非驱动级 |
+    | 进程 | 常退出 | **存活** | 非 OOM |
+    | CPU / GPU | 超售 paging 时**忙** | **CPU 0 / GPU 闲** | **= 死锁/等死** |
+    ⇒ **证据不支持"典型 OOM"**；更像**应用层挂起（等一个永不返回的锁/事件）**。
+  - **背景嫌疑（未证）**：`--kv-capacity 163840` = **KV 全驻显存**（启动即 `free 836.7 MiB`）⇒ 全程高显存临界；某 prefill 路径在临界显存下或走了异常等待分支（但表现为 **hang 而非干净报错**，**待查**）。
+  - **下一步（用户 2026-10-07 决策）**：**降 `--max-context` + `--kv-capacity`** 后复跑，观察是否仍 hang；**保留 `req#30` 请求**（10 msgs / 32 tools / medium / 16000）以便复现。
+  - **排查法（下次一测即知）**：hang 时**立刻** `nvidia-smi` —— GPU **0% = 死锁**、**忙 = 超售 paging**。
+
+- **A5｜模型端现象：本地 27B 三元的"思维循环"（think loop）（2026-10-07，用户第二次遇到）**
+  - **现象**：客户端 pi-ai 连**本地 8094**（`Ternary-Bonsai-2-27B-ninfer-v3` 三元量化），在**调试 `fluid.html`（WebGL 着色器）**这类长任务中，其思维链**陷入循环**：
+    - 同一段 `setUniforms` 代码被**原样重读/重析 5+ 遍**（几乎一字不差）；
+    - "Let me just try the simplest possible fix" 反复出现 **≥5 次**、"Actually, I just realized something" 无限重复；
+    - **无任何实际产出**（一行代码都没改），全程"分析→卡住→试最简单的→再分析"空转；
+    - 期间接连 **上下文压缩两次**（28,485 / 23,319 tokens）。
+  - **与"引擎 hang"（A4）严格区分——别混**：
+    | | A4 engine hang | A5 思维循环 |
+    |---|---|---|
+    | 谁的问题 | **引擎** | **模型** |
+    | 引擎日志 | 停写 12 分钟 | **正常**（同期 `674 tok/s` / `req#85 accepted 85.1%`） |
+    | 客户端表现 | 收不到任何字节（`idle timeout`） | 收得到，但**内容重复、不收敛** |
+  - **疑似根因（按可能性）**：① **上下文压缩丢状态** —— 压缩砍掉中间推理后，模型"忘了刚分析过"，**逐轮从头重来**（最像）；② **任务超能力** —— WebGL/驱动 bug 罕见且硬，27B 三元（2.125 bit）**分析瘫痪**；③ **思考预算烧在循环**（`thinking …/16,000`）。
+  - **缓解（经验）**：① **拆任务**（一次一个错误 / 一处改动，别整个文件）；② **外置状态**（把已分析结论 / 已排除项写进 prompt 或文件，别依赖压缩后的记忆）；③ **别让它重读大文件**（直接贴要改的段落）；④ **调参对照**（思考预算 16k↔8k / 关思考）；⑤ **预期管理**（高难图形/驱动问题可能是能力边界，交更强模型或人工）。
+  - **判定**：**模型端推理退化**，**非引擎故障**；属本地 27B 三元在长/难任务上的**可识别边界现象**。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
