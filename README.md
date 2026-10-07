@@ -12,19 +12,17 @@
 |---|---|---|
 | **模型制品** | `Ternary-Bonsai-2-27B-ninfer-v3.ninfer`（9.52 GB，三元量化） | 沈三殊（shensanshu） |
 | **引擎源码** | NInfer v0.11.0 + KVMem 环 | Neroued（NInfer）· 1314521gjy（KVMem 环融合） |
-| **引擎成品**（对照用） | `ninfer-serve-120a.exe`（**1 个 exe** + 依赖 DLL） | 沈三殊成品包 `infer-engine-sm120a-20261002` |
+| **引擎成品** | `ninfer-serve-120a.exe` + 依赖 DLL | 沈三殊成品包 `infer-engine-sm120a-20261002` |
 
 ### 本项目做的 —— `engine/self-built/`
 | 项 | 内容 |
 |---|---|
-| **自行编译的引擎 + 工具链** | **4 个 exe**：`ninfer-serve`（推理服务）· `ninfer`（主程序）· `ninfer-perplexity`（困惑度评估）· `ninfer-calibrate`（校准）＋ **运行环境**（8 个 DLL） |
+| **自行编译的引擎 + 工具链** | `ninfer-serve`（推理服务）· `ninfer`（主程序）· `ninfer-perplexity`（评估）· `ninfer-calibrate`（校准）＋ 运行环境（DLL） |
 | **8 处源码补丁** | ① **MSVC 编译兼容 ×7**（让上游源码在 Windows / MSVC 下编得过）；② **思考区收尾补丁** —— 治"模型在思考区 `stop` 导致**空正文**"（官方成品不具备该能力） |
 | **GUI 启动器** | `ninfer_launcher.py`：参数下拉 + 命令预览 + 一键起服 + 环境自检 / 就绪自测 + 命名组合 + 场景预设 + **引擎选择（自编 / 官方）** |
 | **日志工具** | `serve_tee.py`：关键读数着色 + 精简 / 全部模式；日志全文落盘 |
 | **验证与结论** | KVMem 长上下文检索的判活与有效性验证；投机解码的语料效应与档位结论（见下文「关键结论」） |
 | **复现材料** | `build/`：构建脚本 + 复现说明 + 产物清单（12 文件 SHA256） |
-
-> **官方成品包只提供 1 个 exe**；本仓编出了 **4 个**——多出 `ninfer` / `ninfer-perplexity` / `ninfer-calibrate` 三个官方包没有的工具，并配齐运行环境。
 
 ## 二、两分支
 
@@ -110,10 +108,12 @@ engine/ninfer-serve-120a.exe      models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer -
 | 上游底子 | NInfer v0.11.0 + KVMem 环 + 沈三殊 v3 成品包 | 沈三殊（技术起点）+ Ambolio 移植 + CraneBW 内核 |
 | 本项目做的 | 自行编译引擎 + 工具链 + 启动器 / 日志工具 + 验证 | 移植适配 / 改 CMake / 合内核 / 自产 v2 制品 |
 | 架构 | 原生 sm_120a | 改 CMake `89\|120a` |
+| **KV / 显存机制** | **KVMem 环**：显存小池 + 主机内存卸载（`--kv-capacity` 可**小于**上下文） | Device/Host **双层 KV**（被动容量） |
 | 长上下文 | **KVMem 环（主动检索）** | 双层 KV（被动容量） |
 | 投机解码 | dflash2 + MTP + ngram 混合 | MTP / DFlash2 |
 | 预填充极值 | 3,820 tok/s | 2,850 tok/s |
 | 解码极值 | 748.6 tok/s | 396.9 tok/s |
+| **满上下文显存** | 可**卸载到主机**；实跑 free 0.79–1.14 GiB | `k8v4` 256K 满血 **15.36 GiB**（另 pinned 主机 ~9.2 GiB） |
 | 模型制品 | 上游 v3（9.52 GB） | 自产 v2（9.81 GiB） |
 | 服务端口 | 8094 / 8091 / 8095 | 18787 |
 
