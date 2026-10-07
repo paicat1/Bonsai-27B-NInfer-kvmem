@@ -8,17 +8,25 @@
 
 ## 一、本仓与姊妹仓（同一模式 · 两条技术路线）
 
-> 本仓与 `J:\Bonsai` 是**同一个模式**：**上游给的底子 + 我们的编译与优化**。**唯一区别 = 技术路线不同。**
+> 本仓与姊妹仓是**同一个模式**：**上游给的底子 + 我们的编译与优化**。**唯一区别 = 技术路线不同。**
 
-| | **本仓** `J:\Bonsai-Official` | 姊妹仓 `J:\Bonsai` |
+| 维度 | **本仓** [`paicat1/Bonsai-27B-NInfer-kvmem`](https://github.com/paicat1/Bonsai-27B-NInfer-kvmem) | **姊妹仓** [`paicat1/Bonsai-27B-NInfer`](https://github.com/paicat1/Bonsai-27B-NInfer) |
 |---|---|---|
 | **上游给的底子** | NInfer **v0.11.0 + KVMem 环**（`1314521gjy` 融合）+ 沈三殊三元 **v3** 成品包 | **沈三殊**（三元-Bonsai 论文 + `ada-ternary` 工具链 = **技术起点**）+ **Ambolio** `ninfer-4090-windows`（4090/sm_89 移植）+ **CraneBW** 内核 |
 | **我们的** | **自编引擎**（编译补丁 C2326/C3495/C2026 + **Design C**） | 移植适配 / 改 CMake / 合内核 / 自产 **v2** 制品 |
 | **架构** | 原生 **sm_120a** | 改 CMake `89\|120a` |
-| **预测解码** | dflash2 + **ngram 混合投机** | MTP / DFlash2 |
-| **长上下文** | **KVMem 环 / 内容打分**（主动检索） | Device/Host 双层 KV（被动容量） |
+| **KV / 显存机制** | **KVMem 环**：显存小池 + 主机内存卸载，`--kv-capacity` 可**小于**上下文；KV 精度多档（`k8v4`/`nvfp4`/`rk*`/`fp8`/`bf16`…） | Device/Host **双层 KV**（被动容量）；精度档 `fp8`/`bf16`/`k8v4`/`nvfp4` |
+| **长上下文** | **内容打分主动检索**（KVMem 环） | 被动容量（无检索） |
+| **投机解码** | **dflash2（K1–15）· MTP（K1–5）·以及二者 + ngram 混合**（启动器可切；实跑首选 dflash2 K=7 + ngram） | **MTP（K1–5）· DFlash2（K1–15）**（无 ngram 混合） |
+| **预填充极值** | **3,820 tok/s**（`nvfp4` / 224K 档） | **2,850 tok/s**（S8 内核；窗口口径极值 2,660） |
+| **解码极值** | **748.6 tok/s**（窗口口径；dflash2 K7 + ngram，真实工具语料） | **396.9 tok/s**（窗口口径；全库 78 份日志） |
+| **满上下文显存** | KVMem 环可**卸载到主机**；实跑 free 0.79–1.14 GiB | `k8v4` 256K 满血 **15.36 GiB**（另 pinned 主机 ~9.2 GiB） |
+| **模型制品** | 沈三殊三元 **v3**（9.52 GB） | 自产 **v2**（9.81 GiB） |
+| **服务端口** | 8094 / 8091 / 8095 | 18787 |
 
-- **本仓 = 进阶**：`J:\Bonsai` 是初步的；本仓在**预测解码（+ngram 混合）**与**融合 KVMem**上更全。
+> ⚠️ **口径**：两仓极值来自**不同语料与投机组合**（本仓 = 真实工具语料 + dflash2 K7 + ngram；姊妹仓 = 各自历史档位），**不是严格同口径对决**，仅作量级对照。
+
+- **本仓 = 进阶**：姊妹仓是初步的；本仓在**预测解码（+ngram 混合）**与**融合 KVMem**上更全。
 - 两仓**彼此隔离、互为对照**（2026-10-06 裁决）。
 
 ## 二、本引擎（自编 · 含 Design C）
@@ -83,10 +91,10 @@
 | `models/` | ❌ 体积 | 模型制品 `Ternary-Bonsai-2-27B-ninfer-v3.ninfer` |
 | `official-repo/` | ❌ 上游 | 上游全库 clone（引擎源码，复现输入） |
 | `logs/` | ❌ | 运行日志（含 `kvmem_score` 检索证据） |
-| `.temp/` | ❌ | **仅临时中间物**（草稿 / 一次性脚本 / 日志；**严禁放成果**——见铁律 `T-NO-TEMP-WORK`） |
+| `.temp/` | ❌ | 临时中间物（草稿 / 一次性脚本 / 日志），不入库 |
 | `_safety_backups/` | ❌ | 备份快照 |
 
-**别人 clone 后怎么用**：① 按 `build/README.md` 复现出**自己的引擎**（或获取 `engine/`、`models/`）；② 启动器里选「引擎」= 自编 / 官方 → 起服。
+**上手**：① 按 `build/README.md` 复现引擎（或自备 `engine/`、`models/`）；② 启动器里选「引擎」= 自编 / 官方 → 起服。
 
 ## 六、关键结论（速览）
 
@@ -113,7 +121,7 @@
 - **S1–S2**：起服监听 `127.0.0.1:8094`；`GET /v1/models` 200 + **真发一条请求** 200（判活必须真发请求，`/v1/models` 200 ≠ 健康）。
 - **S4 长文检索三层判据**（G14）：正文埋针 + **问句独立成回合** ⇒ 问句 span ≤ `MAXQ=256` ⇒ 打分真跑（`scored_kept>0`）、针被答出、kept 覆盖针位。
 - **S5 同口径 A/B（数数字 / 中文散文 / 英文散文）**：同一 dflash 档下，数数字接受率 **91.5%** 而散文骤降到 **3.7%（中）/ 13.4%（英）** ⇒ "decode 高"**仅对数数字语料成立**；差距本质是**语料效应**（接受率是强内容依赖指标，不能用合成填充文本测）。
-- **S5 判决（H2）**：同语料同 draft 口径下，本仓原生**并未显著优于** `J:\Bonsai` 当前配置（散文两组对方反超）。
+- **S5 判决（H2）**：同语料同 draft 口径下，本仓原生**并未显著优于**姊妹仓当前配置（散文两组对方反超）。
 - **S6 自编 120a**：源码**全树 MSVC 构建成功**（3 类编译补丁）+ **Design C**——双 exe 探针实测：**自编 serve 的思考预算生效（稳定输出正文），官方成品不解析该字段**。
 - **真实负载实跑（2026-10-07，19 请求，32 工具对话）**：档位 **dflash2 K=7 + 思考预算 16000**，KV 163,840 **全驻显存**（free 0.84 GiB）。**瞬时峰值 decode 748.6 tok/s**；请求级 decode 180–655、**mixed speculation 接受率 35.7–94.4%**（长输出 ngram 命中 ≈98%）；续写缓存 99.9–100%、TTFT 0.18–0.29 s。⇒ 真实负载同样能跑高——**关键在 K=7 + ngram 混合投机**。
 - **预填充极值 3,820 tok/s**（2026-10-07 配置 `--kv-dtype nvfp4 --max-context 229376`，KV 全驻）：`req#2 done | prompt 8,979 | prefill 3.82k tok/s` —— 全区间最高。
@@ -133,10 +141,10 @@
 
 本项目站在上游作者肩上落地，致谢：
 
-- **沈三殊（shensanshu）· UP主**：**三元-Bonsai 作者**——发布三元 Bonsai 论文 / 工具链（[`shensanshu/ninfer-ada-ternary`](https://modelscope.cn/models/shensanshu/ninfer-ada-ternary)，ModelScope）**及本仓所用的"三元 Bonsai 成品引擎包"（`infer-engine-sm120a-20261002`）与三元 v3 制品**；**也是 `J:\Bonsai` 的技术起点**（三元-Bonsai 论文 + `ada-ternary` 工具链），是**两条线共同的源头**。
+- **沈三殊（shensanshu）· UP主**：**三元-Bonsai 作者**——发布三元 Bonsai 论文 / 工具链（[`shensanshu/ninfer-ada-ternary`](https://modelscope.cn/models/shensanshu/ninfer-ada-ternary)，ModelScope）**及本仓所用的"三元 Bonsai 成品引擎包"（`infer-engine-sm120a-20261002`）与三元 v3 制品**；**也是姊妹仓的技术起点**（三元-Bonsai 论文 + `ada-ternary` 工具链），是**两条线共同的源头**。
 - **Neroued**：NInfer 上游作者（C++20/CUDA）。[`Neroued/ninfer`](https://github.com/Neroued/ninfer)
-- **1314521gjy**：本线引擎血统来源 `ninfer-fusion-kvmem`（NInfer v0.11.0 基座 + KVMem 环融合）。
-- **Ambolio**（`ninfer-4090-windows` 移植树）+ **CraneBW**（三元内核）：姊妹仓 `J:\Bonsai` 的上游底子。
+- **1314521gjy**：本线引擎血统来源 [`1314521gjy/ninfer-fusion-kvmem`](https://github.com/1314521gjy/ninfer-fusion-kvmem)（NInfer v0.11.0 基座 + KVMem 环融合）。
+- **Ambolio**（[`Ambolio/ninfer-4090-windows`](https://github.com/Ambolio/ninfer-4090-windows) 移植树）+ **CraneBW**（[`CraneBW/ninfer-ternary-bonsai-ada`](https://github.com/CraneBW/ninfer-ternary-bonsai-ada) 三元内核）：姊妹仓的上游底子。
 - **ashalliants / Warlax / TertiumOrganum1 / UDPSendToFailed / IMGillusion** 等 NInfer 整合线与各 fork 作者：引擎整合与内核贡献者。
 - **模型根基**：Qwen Team 架构 + unsloth NVFP4 量化 + z-lab DFlash 权重。
 
