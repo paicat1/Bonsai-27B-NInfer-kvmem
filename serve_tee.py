@@ -27,10 +27,14 @@ C_RESET  = "\033[0m"
 
 
 def is_kept_noise(line):
-    """判定是否为 KVMem KEPT 刷屏行（`kvmem_score: KEPT ...` 大段数字）。
-    这类行由引擎硬编码 fprintf 无条件输出（无环境变量可关），只在**控制台窗口**过滤掉，
-    **日志文件仍全文落盘**（保留 grep 取证）。保留 `kvmem_score: SELECT ...` 与业务行。"""
-    return line.startswith("kvmem_score: KEPT")
+    """判定是否为 KVMem KEPT 刷屏行（只在**控制台窗口**过滤，**日志文件仍全文落盘**保 grep）。两种形态：
+    ① `kvmem_score: KEPT <数字...>`；
+    ② 引擎把**超长 KEPT 拆行**后的**纯数字续行**（无前缀，如 " 1009 1010 … 1143"）——之前漏网就是漏了它。
+    业务行都含时间戳/字母（`20xx-… INFO …`），不会被②误伤。"""
+    if line.startswith("kvmem_score: KEPT"):
+        return True
+    s = line.strip()
+    return len(s) >= 8 and all(ch.isdigit() or ch == " " for ch in s)
 
 
 def is_select(line):
