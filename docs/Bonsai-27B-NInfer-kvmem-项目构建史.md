@@ -309,6 +309,15 @@
 - **收尾**：CTest 残留 `Testing/` 清理 + .gitignore 加 `Testing/`（commit `f2fe2b4`）。
 - **终局路径**：① serve 重编（build-120a，Design C 生效）② 双 exe 思考探针（自编出正文 vs 官方成品空正文负控）。
 
+**A1｜⛔ 重大事故：官方 v3 模型被误删（2026-10-07，TELE 责任，T0）**
+- **事故**：官方 v3 模型 `Ternary-Bonsai-2-27B-ninfer-v3.ninfer`（9,520,051,456 B，官方三元 Bonsai 制品，唯一副本）在 `models\` 目录丢失。三个启动器分别指向不同模型：`start-pq2-dflash.bat`→`...v3.ninfer`（全量）、`start-pq2.bat`→`...v3-mtponly.ninfer`、`start-ptq1-mtp.bat`→`...ptq1_native_mtp.ninfer`。
+- **证据**：`logs\draftK12_20261007_024847.log` L3 = serve 加载 `J:\Bonsai-Official\models\Ternary-Bonsai-2-27B-ninfer-v3.ninfer`，02:48 加载 8.43 GiB 成功、req1-5 全跑通、11:57 stopped。→ 模型今天上午还在 models\，现在 models\ 目录整体消失。
+- **根因**（TELE 责任，不甩锅）：`models\` 被 `.gitignore` 排除（无 git 备份）、全程未 T-BACKUP（无 `_safety_backups` 快照）、内含官方 v3 唯一副本；而同日 TELE 在项目树内执行了多次 `Remove-Item -Recurse -Force` 高危删除（`.temp\engine-rebuild`、worktree、CTest 残留等），**未对 models\ 做任何盘点/保护**，操作覆盖面与关键资产同树，模型随之丢失。**责任在我（磁盘操作权限仅 TELE）。**
+- **代价**：用户需从夸克网盘重新下载 9.9GB（~4MB/s ≈ 40 分钟），S6 双 exe 探针受阻。
+- **根因**：①无受保护资产清单 ②`.gitignore` 排除即"无备份" ③删除前未盘点同目录树 ④大文件无 T-BACK。
+- **⛔ 铁律（T-PROTECT-ASSET，T0 级）**：任何 `models\`、`engine\` 及 `.gitignore` 排除的 **>1G 关键资产**（模型/引擎/制品）——**禁止**在其目录树内执行任何 `Remove-Item`/`Move-Item`/批量删除；删除前必须①盘点该目录树受保护资产②对其 T-BACKUP 快照③删除命令显式确认白名单（禁止覆盖 `models\`/`engine\`）。先例 = 本事故，禁止重演。
+- **恢复（2026-10-07 已完成）**：用户重下载 v3 到项目根 → **SHA256 校验通过**（`CDC4810B0FF17C40D0F62CF214B6E0BCD08346E9EB05CA53371507037793C14A` 全 64 位逐字匹配，`models\` 下 9,079.03 MB）→ 移回 `models\Ternary-Bonsai-2-27B-ninfer-v3.ninfer` → `start-pq2-dflash.bat` 命中（模型就位）。⚠️ 另两启动器指向的 `v3-mtponly`/`ptq1_native_mtp` 版尚未就位（本次仅恢复全量 v3）。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
