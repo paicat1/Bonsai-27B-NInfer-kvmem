@@ -2,7 +2,7 @@
 
 > **文档性质**：官方线项目的**过程实录**（边做边记），参照自建线 `J:\Bonsai\docs\项目构建史.md` 体例：**只写有证据的；证据不足标【待补】；没掌握的明说没掌握。**
 > **建立日期**：2026-10-06（TeleAgent，TELE）
-> **修订记录**：2026-10-06 首建（覆盖 10-02 触发 → 10-06 物料落地、交叉评审、施工方案、引擎 BUG 发现、工作区交接）；2026-10-06 晚增补（S0 只读自检完成、建本地 git 库待提交、分工变更 TELE 施工 / CODE 复核、CODE 反向复核四修正核验）。
+> **修订记录**：2026-10-06 首建（覆盖 10-02 触发 → 10-06 物料落地、交叉评审、施工方案、引擎 BUG 发现、工作区交接）；2026-10-06 晚增补（S0 只读自检完成、建本地 git 库待提交、分工变更 TELE 施工 / CODE 复核、CODE 反向复核四修正核验）；2026-10-07 增补（S1–S6 全流程实录、双 exe 探针、启动器工程化、serve_tee、阶段收尾）。
 > **写作背景**：防"会话记忆拼凑/编造"的教训——历史必须落纸带证据。（初建时本项目无 git 库；**2026-10-06 晚已 `git init`，见 §8-B**。）
 > **协作模式**：CODE（CodeBuddy 环境）+ TELE（TeleAgent 环境）双侧协作，**双方不互改对方文档、各自加标识**。
 
@@ -317,6 +317,48 @@
 - **根因**：①无受保护资产清单 ②`.gitignore` 排除即"无备份" ③删除前未盘点同目录树 ④大文件无 T-BACK。
 - **⛔ 铁律（T-PROTECT-ASSET，T0 级）**：任何 `models\`、`engine\` 及 `.gitignore` 排除的 **>1G 关键资产**（模型/引擎/制品）——**禁止**在其目录树内执行任何 `Remove-Item`/`Move-Item`/批量删除；删除前必须①盘点该目录树受保护资产②对其 T-BACKUP 快照③删除命令显式确认白名单（禁止覆盖 `models\`/`engine\`）。先例 = 本事故，禁止重演。
 - **恢复（2026-10-07 已完成）**：用户重下载 v3 到项目根 → **SHA256 校验通过**（`CDC4810B0FF17C40D0F62CF214B6E0BCD08346E9EB05CA53371507037793C14A` 全 64 位逐字匹配，`models\` 下 9,079.03 MB）→ 移回 `models\Ternary-Bonsai-2-27B-ninfer-v3.ninfer` → `start-pq2-dflash.bat` 命中（模型就位）。⚠️ 另两启动器指向的 `v3-mtponly`/`ptq1_native_mtp` 版尚未就位（本次仅恢复全量 v3）。
+
+**A2｜S6 双 exe 探针对照 + 启动器/serve_tee 收尾 + 阶段完成（2026-10-07）**
+
+> 本节为 §8 阶段性收尾记录：把 §T–§Z 的 S6 自编推进到"探针闭环"，并完成启动器与日志工具的工程化，作为本阶段完成的落纸。
+
+- **A2-1｜S6 双 exe 思考探针对照（Design C 生效铁证 + 官方成品不认 budget）**
+  - **方法纠正（重要）**：Design C 补丁（fork `src/models/qwen3_5/frontend/output_session.cpp` L553–571）治的是**"思考区 stop + 预算"路径**（`stop_token && in_reasoning && budget`），**不是 `max_tokens` 的 length 截断**。故探针必须**放宽 `max_tokens`**（≤4096）以避免 `finish=length` 误报空正文。
+  - **自编 serve（8095，Design C 生效）**：`thinking_budget` 取 16 / 32 / 64 三档，**全部稳定输出完整正文**（`th=280` 思考被预算压短、`ct=7015` 完整正文）——Design C 让"思考区收尾→进正文"生效。
+  - **官方成品（8094）对照**：`thinking_budget` 被官方 exe **完全忽略**（0 / 8 / 2048 三档思考 token 恒 65）；`max_tokens` 过小致 `finish=length` 时**空正文复现**。
+  - **定性结论**：Design C 是**自编 serve 新增的"思考预算"能力**（官方成品无此能力、且不解析 OpenAI 请求体的 `thinking_budget` 字段——`translate.cpp` 只从 Anthropic 读），**并非"修官方某个 bug"**。⇒ S6 自编核心价值确认（可打补丁 = 官方成品没有的能力）。
+  - **交接**：`docs\reports\交接-第35轮CODE复核后TELE工作-供CODE复核-20261007.md`（供 CODE 复核四问）。
+
+- **A2-2｜启动器工程化收尾（`ninfer_launcher.py`）**
+  - **命名**：窗口标题 / 主标题 / 文档串三处统一为 **`Bonsai-27B-NInfer-kvmem 启动器`**（用库名，**不冒充官方发布方**）；GUI 内"发货"字样全部清除，改"官方默认 / 官方值"。
+  - **档位对齐旧项目 `J:\Bonsai\ninfer_launcher.py`**：spec 扩为 **21 档**（`k0` 无 + MTP K1–5 + DFlash2 K1–15，默认 `d12`＝官方 draft 12）；KVCAP 扩为 **13 档**（17920 默认 / auto / 16k…256k）；CTX 扩为 **10 档**（32k…256k，**含 64K**）；思考预算（TB）**6 档**（8000/12000/16000/24000/32000 + 无，走 `--default-thinking-budget`）；输出上限（MAXOUT）**6 档**；新增 `tb`/`conc`/`preserve` 三维；**端口可改**（GUI 顶部输入框）。
+  - **命名组合预置**：起服-dflash档 / 备用-MTP档 / 省显存-无视觉 / 思考预算-16000 / 长文档-224K / 并发4-吞吐（首次运行落盘到 `profiles.json`）。
+    - **⚠️ 2026-10-07 更正（见 A2-6）**：本节原写"6 个场景预设"，**措辞不准**——当时它们只是**落在 `profiles.json` 的 6 个命名组合**，GUI 里**并没有**老项目那样的"场景预设"下拉；且投机档当时是单一下拉、命名组合加载还是坏的。A2-6 已补齐并更正。
+  - **自证**：`py_compile exit=0`；全部 KVCAP×CTX 组合构建命令成功。
+
+- **A2-3｜serve_tee.py 着色 + KEPT 刷屏过滤（方案 A）**
+  - **着色**（照抄旧项目 `J:\Bonsai\serve_tee.py`）：decode 数值**绿** / prefill 数值**黄** / 接受率**红**；**日志文件始终保持原文无色**（保 `grep` 取证）。终端原生支持 ANSI/VT，**无需 colorama**（缺失时降级无色）。
+  - **KEPT 过滤（方案 A）**：`kvmem_score: KEPT …` 大段数字刷屏行（引擎硬编码 `fprintf` 无条件输出、无环境变量可关）**只在控制台窗口隐藏**，**日志文件仍全文落盘**；保留 `kvmem_score: SELECT …` 与全部业务行（`req#N done` / `throughput` 等）。自测通过（KEPT 过滤 = True、SELECT/业务行 = False、三色着色正常）。
+  - **备份**：`_safety_backups\serve_tee_20261007_keepfilter_pre.py`；`py_compile exit=0`。
+
+- **A2-4｜预填充读数确认（KVMem 长上下文 prefill 无退化）**
+  - `[EVIDENCE]` `logs\serve_20261007_154655.log`：`req#2 done | prompt 8,801 | prefill 3.76k tok/s | cache 0 (0.0%)`；同规模 8–9K prompt 的 req#5/10/12/13 均 `prefill 3.08–3.42k tok/s`。
+  - `[EVIDENCE]` 同日志：`req#16 done | prompt 39,180 | prefill 1.86k tok/s | decode 130.3 tok/s | dflash2 accepted 238/1,050 (22.7%) | thinking 23/16,000`。
+  - **结论**：短 prompt（8–9K）prefill **3.1–3.8k tok/s**；超长 prompt（28K–59K）回落 **1.8–2.5k**（chunk 翻页检索 + 主机内存搬运成本），**属正常、无退化**。dflash2 在真实工具语料接受率 **~22.7%**，再证"官方 decode 高仅对**数数字语料**成立"（语料效应，见 §N/§R）。
+
+- **A2-5｜阶段完成盘点**
+  - **已完成**：S0 只读自检 / S1 起服（8094）/ S2 就绪自测 / S3 KVMem 管线判活 / S4（G14 双层针 + G15 超池紧探针，长文检索三层判据）/ S5 同口径 A/B（官方线 dflash K4/7/12 + 自建线 MTP K2）/ S6 自编 120a **全树构建成功** + **Design C 补丁** + **双 exe 思考探针对照** / 启动器工程化 / serve_tee 日志工具。
+  - **仍挂账**：① G15 的"**淘汰式检索**"未观测（题面超池但 `kept` 仍全保留，疑与 host-backed KV 有关）；② **E3 MTP 档**（G10 长期挂账，本机缺 `v3-mtponly`/`ptq1_native_mtp` 两模型件）；③ **E4 KV dtype 对比**（未系统扫）。
+
+- **A2-6｜命名组合缺陷修复 + 启动器全面对齐老项目（2026-10-07，用户实测追问后）**
+  - **缺陷发现（用户实测指出"存了加载不出来"）**：
+    - **主 bug**：`_load_profile` 反查方向写反——用**内部值**（如 `d7`）去查"**显示名→内部值**"字典 `_label2key[key][val]`，恒不命中 ⇒ **14 维跳过 13 维、加载实质无效**（仅 `think` 因显示名恰==内部值侬幸通过）。
+    - **次 bug**：`validate()` 裸写 `int(combo["maxout"])`，选「默认(65535)」时 `ValueError` ⇒ **GUI 一刷新即崩**。
+  - **根因（不推诿）**：这两处**都是我自己现编的**，**根本没照老项目 `J:\Bonsai\ninfer_launcher.py` 抄**（用户已多次要求参照老项目）——“连抄都没抄对”。
+  - **修复（照老项目）**：① `_load_profile` 反查改 `opts[val][0]`（内部值→显示名）；② `save_profiles` 改**原子写**（tmp+fsync+os.replace）；③ `load_profiles` **损坏留痕**不静默；④ 新增 `LEGACY_VALUE_MAP` 迁移旧值（`dflash2→d12`/`mtp→k4`）；⑤ `validate` 删裸 `int()`（非数字安全跳过）。
+  - **全面对齐（逐行对照老项目，只抄有用的）**：① **场景预设下拉**（GUI `preset_cb` + `_apply_preset`，源=内置 `PRESET_PROFILES`）；② **投机档两级联动**（类型 无/MTP/DFlash2 + K 值；`_update_spec_k_range`/`_spec_key_from_ui`/`_apply_spec_to_ui`）；③ **`build_command` 加 `_argv_of()` 回退**（照老项目 D8，未知/旧值不 KeyError）；④ **`ToolTip` 兜底 try**（widget 失效不抛）。
+  - **不抄项（甄别）**：老项目 MODEL / BUILD / PREFILL 内核选项、端口写死 18787、`kvcap<ctx` 报错——**官方线不适用**（官方线 kvcap 可<ctx 是 KVMem 特性）；保留本项目更优项：端口可改 / 环境自检 / 就绪自测 / KVMem 五 env 注入 / hemostat 维度。
+  - **自证**：`py_compile exit=0`；回归自测 **23 项全过**（存→改乱→载→14 维全对 / 旧值迁移 / 场景预设 6 项 / build_command 回退 / 持久化）。备份 `_safety_backups\ninfer_launcher_20261007_profilefix_pre.py` + `..._align_pre.py`。
 
 ---
 
