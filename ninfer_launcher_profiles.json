@@ -82,5 +82,21 @@
     "conc": "1",
     "preserve": "on",
     "hemostat": "on"
+  },
+  "224K NVFP4 视觉 ": {
+    "spec": "d7",
+    "kv": "nvfp4",
+    "ctx": "224k",
+    "kvcap": "224k",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "medium",
+    "tb": "16000",
+    "maxout": "32768",
+    "vision": "on",
+    "sample": "shipped",
+    "conc": "1",
+    "preserve": "on",
+    "hemostat": "on"
   }
 }

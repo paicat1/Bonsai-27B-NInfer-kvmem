@@ -28,8 +28,13 @@ import urllib.error
 # 常量：路径与基础参数
 # ---------------------------------------------------------------
 ROOT        = os.path.dirname(os.path.abspath(__file__))          # 项目根（便携：不写死盘符）
-ENGINE      = os.path.join(ROOT, "engine", "ninfer-serve-120a.exe")
+ENGINE      = os.path.join(ROOT, "engine", "ninfer-serve-120a.exe")            # 官方成品（无 Design C）
 ENGINE_DIR  = os.path.dirname(ENGINE)
+ENGINE_SELF = os.path.join(ROOT, "engine", "self-built", "ninfer-serve.exe")   # 自编（含 Design C）
+ENGINE_OPTIONS = {
+    "official": ("官方成品",       ENGINE),
+    "self":     ("自编(Design C)", ENGINE_SELF),
+}
 MODEL       = os.path.join(ROOT, "models", "Ternary-Bonsai-2-27B-ninfer-v3.ninfer")
 CONFIG_FILE = os.path.join(ROOT, "ninfer_launcher_profiles.json")
 LOG_DIR = os.path.join(ROOT, "logs")
@@ -223,8 +228,9 @@ PRESET_PROFILES = {
 # ---------------------------------------------------------------
 # 校验 / 命令构造
 # ---------------------------------------------------------------
-def validate(combo):
+def validate(combo, exe=None):
     """返回告警列表（空 = 无告警）。"""
+    exe = exe or ENGINE
     warns = []
     mx = str(combo.get("maxout", "default"))
     mx_val = 65535 if mx == "default" else (int(mx) if mx.isdigit() else 0)  # "default"=65535；非数字安全跳过（照老项目：不裸 int 转换）
@@ -233,8 +239,8 @@ def validate(combo):
                      f"真正的硬约束 = 单请求【prompt_tokens + 输出(max_tokens) ≤ {KV_POOL_TOKENS}】："
                      f"超过会在 prefill 阶段超池——(a)未开止血→worker 崩且不自愈、(b)已开 --kv-lease-growth→"
                      f"被静默截断(finish_reason=length、内容像正常但只有半截)。发请求时请确保 prompt 长度 + max_tokens ≤ {KV_POOL_TOKENS}。")
-    if not os.path.exists(ENGINE):
-        warns.append(f"未找到引擎：{ENGINE}")
+    if not os.path.exists(exe):
+        warns.append(f"未找到引擎：{exe}")
     if not os.path.exists(MODEL):
         warns.append(f"未找到模型：{MODEL}")
     if any(ord(c) > 127 for c in ROOT):
@@ -250,9 +256,11 @@ def _argv_of(table, value, fallback_key):
     return ent[1] if ent else []
 
 
-def build_command(combo, port=PORT_DEFAULT):
+def build_command(combo, port=PORT_DEFAULT, exe=None):
     """返回 (exe, argv)。argv 为引擎参数（不含 exe）；核心参数与官方 start-pq2-dflash.bat 逐字等价，另含 E5 止血两旗（hemostat=on，可关）。
-    取值一律经 _argv_of() 回退（照老项目 D8），profile 含旧/未知键值也不 KeyError。"""
+    取值一律经 _argv_of() 回退（照老项目 D8），profile 含旧/未知键值也不 KeyError。
+    exe=None 时用官方成品；传 ENGINE_SELF 用自编引擎。"""
+    exe = exe or ENGINE
     argv = [MODEL, "--host", "127.0.0.1", "--port", str(port), "--model-id", "qwen3.8-27b"]
     argv += _argv_of(CTX_OPTIONS,     combo.get("ctx", "256k"),      "256k")
     argv += _argv_of(KVCAP_OPTIONS,   combo.get("kvcap", "17920"),   "17920")
@@ -269,13 +277,13 @@ def build_command(combo, port=PORT_DEFAULT):
     argv += ["--max-shared-prefixes", "0"]   # 铁律：防打砖
     argv += _argv_of(SAMPLE_OPTIONS,  combo.get("sample", "shipped"), "shipped")
     argv += _argv_of(HEMOSTAT_OPTIONS, combo.get("hemostat", "on"),  "on")   # B01 止血（E5 决定：默认开）
-    return ENGINE, argv
+    return exe, argv
 
 
-def env_for_launch():
+def env_for_launch(exe=None):
     env = dict(os.environ)
     env.update(KV_ENV)
-    env["PATH"] = ENGINE_DIR + os.pathsep + env.get("PATH", "")
+    env["PATH"] = os.path.dirname(exe or ENGINE) + os.pathsep + env.get("PATH", "")
     return env
 
 
@@ -418,6 +426,7 @@ class LauncherApp:
         self._label2key = {}
         self.port_var = tk.StringVar(value=str(PORT_DEFAULT))
         self.logmode_var = tk.StringVar(value="精简")
+        self.engine_var = tk.StringVar(value=ENGINE_OPTIONS["official"][0])
         # 投机档两级联动：类型 + K 值（照老项目；初值由 DEFAULTS["spec"] 解析）
         _d = DEFAULTS["spec"]
         if _d == "k0":
@@ -456,6 +465,14 @@ class LauncherApp:
                                        values=["精简", "全部"], font=("Microsoft YaHei UI", 9))
         self.logmode_cb.pack(side="left", padx=(4, 0))
         ToolTip(self.logmode_cb, "窗口日志显示：精简=只留每段 SELECT 首末条 + 业务行（KEPT 隐藏）；全部=不过滤（查错用）。日志文件两种模式都全文落盘。")
+        # 引擎版本（官方成品 / 自编 Design C）——我们自己的引擎在此可选
+        tk.Label(portrow, text="引擎:", bg=self.bg, fg="#2b3a6b",
+                 font=("Microsoft YaHei UI", 10)).pack(side="left", padx=(16, 0))
+        self.engine_cb = ttk.Combobox(portrow, state="readonly", width=14, textvariable=self.engine_var,
+                                      values=[v[0] for v in ENGINE_OPTIONS.values()], font=("Microsoft YaHei UI", 9))
+        self.engine_cb.pack(side="left", padx=(4, 0))
+        self.engine_cb.bind("<<ComboboxSelected>>", lambda _e: self._refresh())
+        ToolTip(self.engine_cb, "用哪个引擎起服：官方成品 / 自编（含 Design C，治思考区空正文）。预览与启动都用所选引擎。")
 
         # 左：参数区（可滚动）
         left_outer = tk.Frame(main, bg=self.bg)
@@ -621,16 +638,22 @@ class LauncherApp:
         self._on_change()
         self.status.config(text=f"已应用场景预设「{name}」", fg="#4a6b4a")
 
+    def _engine_path(self):
+        for _k, (lbl, path) in ENGINE_OPTIONS.items():
+            if lbl == self.engine_var.get():
+                return path
+        return ENGINE
+
     def _refresh(self):
         self.selection = {k: self.selection.get(k, DEFAULTS[k]) for k in DEFAULTS}
-        exe, argv = build_command(self.selection, self._port())
+        exe, argv = build_command(self.selection, self._port(), self._engine_path())
         envs = " ".join(f"{k}={v}" for k, v in KV_ENV.items())
         text = f"[env  {envs}]\n\n{exe}\n  " + "\n  ".join(argv)
         self.cmd_box.configure(state="normal")
         self.cmd_box.delete("1.0", "end")
         self.cmd_box.insert("1.0", text)
         self.cmd_box.configure(state="disabled")
-        warns = validate(self.selection)
+        warns = validate(self.selection, self._engine_path())
         if warns:
             self.status.config(text="⚠ " + "\n⚠ ".join(warns), fg="#b07a20")
         else:
@@ -700,19 +723,19 @@ class LauncherApp:
 
     # ---- 启动 ----
     def _launch(self):
-        warns = validate(self.selection)
+        warns = validate(self.selection, self._engine_path())
         hard = [w for w in warns if "未找到" in w or "非 ASCII" in w]
         if hard:
             messagebox.showerror("无法启动", "\n".join(hard))
             return
-        exe, argv = build_command(self.selection, self._port())
+        exe, argv = build_command(self.selection, self._port(), self._engine_path())
         if not messagebox.askyesno("启动确认", f"确认启动 serve？\n\n{exe}\n\n端口: {self._port()}\n\n"
                                                f"（会在新控制台窗口运行；关窗 = 停服）"):
             return
         try:
             CREATE_NEW_CONSOLE = 0x00000010
             logfile = os.path.join(LOG_DIR, "serve_" + time.strftime("%Y%m%d_%H%M%S") + ".log")
-            env = env_for_launch()
+            env = env_for_launch(exe)
             env["SERVE_TEE_MODE"] = "full" if self.logmode_var.get() == "全部" else "slim"
             subprocess.Popen([PYTHON_EXE, TEE_SCRIPT, logfile, exe] + argv,
                              env=env, cwd=ROOT,
