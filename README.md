@@ -21,7 +21,8 @@
 
 ## 双线背景（为什么有这一条官方线）
 
-- **官方线**（本仓，`J:\Bonsai-Official`）：基于 UP主发布的**三元 Bonsai 官方成品引擎包** `infer-engine-sm120a-20261002`（原生 sm_120a 引擎 + 官方三元 v3 制品），**不混编、不改官方引擎**——只跑、只验证、按需自编。
+- **官方线**（本仓，`J:\Bonsai-Official`）：基于 **UP主沈三殊（shensanshu）** 发布的**三元 Bonsai 成品引擎包** `infer-engine-sm120a-20261002`（原生 sm_120a 引擎 + 三元 v3 制品），**不混编、不改引擎**——只跑、只验证、按需自编。
+  - ⚠️ **"官方"指谁**：此**成品整包（引擎 + 三元 v3 制品）是由三元 Bonsai 作者沈三殊（UP主）发布的**，**不是** NInfer 作者（Neroued）发的，**也不是** KVMem 环作者（1314521gjy）发的——后两者是**内核 / KVMem 环的上游血统**。
 - **自建线**（另一项目，`J:\Bonsai`）：既有 Ambolio v1.0.8 移植树 + 自产 v2 制品的冻结对照。
 - 两线**完全隔离、彼此验证**（用户 2026-10-06 裁决"双线并行"）。**本仓不掺和、不管理、不优化自建线**；自建线仅按需临时拉起当 A/B 对照基线。
 
@@ -88,6 +89,7 @@
 - **S5 判决（H2）**：同语料同 draft 口径下，官方原生**并未显著优于**自建当前配置（散文两组自建接受率反超）。
 - **S6 自编 120a**：官方源码**全树 MSVC 构建成功**（3 类编译补丁），并打上 **Design C** 补丁——对"思考区空正文"给出自编侧解法；双 exe 探针实测：**自编 serve 的思考预算生效（稳定输出正文），官方成品不解析该字段**。
 - **真实负载实跑（2026-10-07，19 请求，32 工具对话）**：档位 **dflash2 K=7 + 思考预算 16000**，KV 163,840 **全驻显存**（free 0.84 GiB）。**瞬时峰值 decode 748.6 tok/s**（> 官方验收 571.9）；请求级 decode 180–655、**mixed speculation 接受率 35.7–94.4%**（长输出 ngram 命中 ≈98%）；续写缓存 99.9–100%、TTFT 0.18–0.29 s。⇒ 真实工具负载同样能跑高——**关键在 K=7 + ngram 混合投机**（非"只能数数字"）。口径：serve 运行中所记单请求/瞬时值，聚合未收尾。
+- **预填充极值 3,820 tok/s**（2026-10-07 **新配置** `--kv-dtype nvfp4 --max-context 229376 --kv-capacity 229376`，KV 全驻）：`req#2 done | prompt 8,979 | prefill 3.82k tok/s` —— **全区间最高**（今日各日志极值 `3,820 / 3,780 / 3,760 / 3,630 / 3,080 / 2,860`）。
 
 ![真实负载实跑 —— CMD 控制台日志：decode 峰值 748.6 tok/s（KVMem SELECT / throughput / req#done）](docs/images/run-20261007-decode748.png)
 
@@ -105,7 +107,7 @@
 本项目站在上游作者肩上落地，致谢：
 
 - **Neroued**：NInfer 官方上游作者（C++20/CUDA）。[`Neroued/ninfer`](https://github.com/Neroued/ninfer)
-- **沈三殊（shensanshu）**：三元-Bonsai 技术论文作者，发布 [`shensanshu/ninfer-ada-ternary`](https://modelscope.cn/models/shensanshu/ninfer-ada-ternary)（ModelScope）——技术起点。
+- **沈三殊（shensanshu）· UP主**：**三元-Bonsai 作者**——发布三元 Bonsai 论文 / 工具链（[`shensanshu/ninfer-ada-ternary`](https://modelscope.cn/models/shensanshu/ninfer-ada-ternary)，ModelScope）**及本线所用的"三元 Bonsai 成品引擎包"（`infer-engine-sm120a-20261002`）与三元 v3 制品**，是本项目官方线的**成品发布方**。
 - **1314521gjy**：本线引擎血统来源 `ninfer-fusion-kvmem`（NInfer v0.11.0 基座 + KVMem 环融合）。
 - **ashalliants / Warlax / TertiumOrganum1 / UDPSendToFailed / IMGillusion** 等 NInfer 整合线与各 fork 作者：官方引擎的整合与内核贡献者。
 - **模型根基**：Qwen Team 架构 + unsloth NVFP4 量化 + z-lab DFlash 权重。

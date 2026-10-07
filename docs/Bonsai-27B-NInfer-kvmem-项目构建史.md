@@ -10,13 +10,14 @@
 
 ## 一、一句话概括
 
-2026-10-06，依据 UP主发布的**三元 Bonsai 官方成品引擎包** `infer-engine-sm120a-20261002`，用户裁决**双线并行、两项目完全隔离**：**官方线**（`J:\Bonsai-Official`，官方原生 sm_120a 引擎 + 官方三元 v3 制品）与**自建线**（`J:\Bonsai`，既有 Ambolio v1.0.8 移植树 + 自产 v2 制品，**冻结只读对照**）。当日完成：引擎/模型物料落地与校验、目录重构、双方交叉评审收敛（首起档=dflash）、双方施工方案初稿、**"思考区空正文"引擎 BUG 在官方 0.11.0 仍存在的源码级发现**、以及工作区交接。
+2026-10-06，依据 **UP主沈三殊（shensanshu）** 发布的**三元 Bonsai 成品引擎包** `infer-engine-sm120a-20261002`，用户裁决**双线并行、两项目完全隔离**：**官方线**（`J:\Bonsai-Official`，官方原生 sm_120a 引擎 + 官方三元 v3 制品）与**自建线**（`J:\Bonsai`，既有 Ambolio v1.0.8 移植树 + 自产 v2 制品，**冻结只读对照**）。当日完成：引擎/模型物料落地与校验、目录重构、双方交叉评审收敛（首起档=dflash）、双方施工方案初稿、**"思考区空正文"引擎 BUG 在官方 0.11.0 仍存在的源码级发现**、以及工作区交接。
 
 ---
 
 ## 二、前置背景（上游，非本项目产出）
 
-- **官方包来源**：UP主 2026-10-02 发布的 `infer-engine-sm120a-20261002`（本地分发副本 `J:\分发\正式版50系\`）。引擎 `ninfer-serve-120a.exe` 构建于 **2026-10-02 21:47**，**原生 sm_120a 单架构**（无 PTX 兜底）。
+- **官方包来源**：**UP主沈三殊（shensanshu）** 2026-10-02 发布的 `infer-engine-sm120a-20261002`（本地分发副本 `J:\分发\正式版50系\`）。引擎 `ninfer-serve-120a.exe` 构建于 **2026-10-02 21:47**，**原生 sm_120a 单架构**（无 PTX 兜底）。
+  - ⚠️ **"官方"归属**：此"成品引擎包 + 三元 v3 制品"由**三元 Bonsai 作者沈三殊（UP主）**整包发布，**非** NInfer 作者（Neroued）发布、**亦非** KVMem 环作者（1314521gjy）发布——后二者是"引擎内核 / KVMem 环"的**上游血统**。
 - **官方开源仓**：`github.com/1314521gjy/ninfer-fusion-kvmem`（**2026-10-04 12:04:52 创建**，GitHub API 实证），C++ / 92 stars；Release `engine-v0.11.0-kvmem-20261003`（**2026-10-04 12:29:46 发布**）。魔搭镜像 `shensanshu/ninfer-master-shensanshu-kvmem`（**只含源码**）。
 - **血统**：官方引擎 = **NInfer `VERSION 0.11.0-rtx3090` 基座 + KVMem 环融合**（`patches/` 92 改 + 44 增）；与自建线 **Ambolio v1.0.8 移植树**是**两支不同代码线**，**不可混编/互打补丁**（本仓 `src-tree\fusion-engine-src\VERSION` 实证）。
 - **官方自陈**：初期版本、含大量未解决 bug（`已知问题-初期版本.md` B01–B20）；**唯一正确性级缺陷 = 超池中段针静默丢失**（官方"别等我们修"）。
@@ -26,7 +27,7 @@
 
 ## 三、触发与双线裁决（2026-10-02 → 10-06）
 
-- **10-02**：UP主发布引擎包。CODE 逐文件核实：包**不是通用 ninfer 包，而是三元 Bonsai 官方成品专包**（`start-pq2.bat` 写死 `...-v3-mtponly.ninfer`；`start-pq2-dflash.bat` 写死 `...-v3.ninfer`）。
+- **10-02**：UP主沈三殊发布引擎包。CODE 逐文件核实：包**不是通用 ninfer 包，而是三元 Bonsai 官方成品专包**（`start-pq2.bat` 写死 `...-v3-mtponly.ninfer`；`start-pq2-dflash.bat` 写死 `...-v3.ninfer`）。
 - **10-06**：TELE 独立核实引擎包完整性——实跑 `verify-kit-manifest.ps1` → **`ok=18 mismatch=0 missing=0`**。
 - **10-06**：用户裁决 **"双线并行、两项目完全隔离、彼此验证"**（不再做"主线二选一"）。方案由 CODE 演进（v2.0→v2.8），TELE 交叉审核。
 
@@ -366,6 +367,7 @@
     - 要点：**dflash2 K=7**（官方推荐档，**非 d12**）+ **思考 medium / budget 16000** + **preserve-thinking** + 视觉开。
   - **装载 / 容量**：`[EVIDENCE]` `logs\serve_20261007_163541.log`：`capacity | KV 163,840 tokens, k8v4, explicit | pages 2,560/2,560 | runtime 6.13 GiB | free 836.7 MiB`（KV **全驻显存**）；`host state pinned 1.46 GiB` + `host KV pinned 16.0 GiB`；`engine ready | total 6.0s | weights 8.43 GiB / 4.7s / 1.79 GiB/s`。
   - **瞬时峰值**：`[EVIDENCE]` `16:38:27 throughput | 5.0s | decode 748.6 tok/s (3,747 tok) | running 1 (decode-ready 1) | batch 1.00 | host 97.5% (4.9s)`。次高：`725.1 / 712.4 / 702.4 / 696 / 683.0 / 666.6 tok/s`。**远超官方验收 571.9**（后者为数数字语料条件）。
+  - **预填充极值**：`[EVIDENCE]` `logs\serve_20261007_174827.log`（**新配置**：`--kv-dtype nvfp4 --max-context 229376 --kv-capacity 229376`，KV **全驻** `pages 3,584/3,584`、`free 788.0 MiB`）：`17:50:42 req#2 done | prompt 8,979 | prefill 3.82k tok/s | decode 218.7 tok/s | mixed accepted 32.9%`。**全区间 prefill 最高 = 3,820 tok/s**（今日各日志极值：`174827=3,820 / 153329=3,780 / 154655=3,760 / 161853=3,630 / 163541=3,080 / 170353=2,860`）。
   - **请求级读数（真实工具对话；每请求 tool calls 1、tools 32）**：
     - `[EVIDENCE]` `req#7 done | prompt 30,956 | output 16,121 | prefill 2.44k tok/s | decode 655.4 tok/s | mixed speculation accepted 14,959/15,854 (94.4%) | ngram 14,539/14,825 accepted, 989 rounds`
     - `[EVIDENCE]` `req#13 done | prompt 42,900 | output 16,811 | cache 42,881 (100.0%) | decode 618.6 tok/s | mixed speculation accepted 15,575/16,601 (93.8%) | ngram 15,015/15,236 accepted`
