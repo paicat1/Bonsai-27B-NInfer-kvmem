@@ -34,5 +34,21 @@
     "maxout": "32768",
     "vision": "off",
     "sample": "shipped"
+  },
+  "180k k8v4 关视觉": {
+    "spec": "d7",
+    "kv": "k8v4",
+    "ctx": "180k",
+    "kvcap": "180k",
+    "hostkv": "16384",
+    "prefill": "1024",
+    "think": "medium",
+    "tb": "16000",
+    "maxout": "32768",
+    "vision": "off",
+    "sample": "shipped",
+    "conc": "1",
+    "preserve": "on",
+    "hemostat": "on"
   }
 }
