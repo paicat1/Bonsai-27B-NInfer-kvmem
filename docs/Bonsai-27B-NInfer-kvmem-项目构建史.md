@@ -297,6 +297,18 @@
 - **意义**：S6 自编 120a 引擎**全树构建成功**，3 类补丁（C2326×4 / C3495×2 / C2026×1）在真实全量构建中验证通过。
 - **下一步**：产物与官方成品 exe 同探针对照 → 打 Design C 补丁 → 重编 → 思考行为探针。
 
+**Z｜Design C 移植（S6 核心价值，2026-10-07）**
+- **背景**：自编 120a 引擎可能"空正文"（thinking 阶段 stop 未正常闭合 → 空答案）。Design C = thinking 阶段 stop 时强制走 target-control，让思考闭合、模型继续进 answer 区。补丁源 = 自建线 `145bccbd`（实测无空收尾）。
+- **落点**：fork `src/models/qwen3_5/frontend/output_session.cpp` L553 stop_token 分支（注入 restore 前）。fork 与自建线 qwen3_6 结构不同，落点经 CODE 第 32 轮定位 output_session.cpp（非 frontend.cpp）。
+- **单测同步（CODE 硬要求）**：官方单测 `test_frontend.cpp:2144-2151` 钉死"终止优先"契约（StopToken+Decode+empty pending），必须改 Design C 新行为（None+ApplyTargetControl+non-empty），对齐自建线 `ca4196ac` 先例，避免重演 G1 契约矛盾。
+- **上游测试破损**：`test_context_store.cpp` 5 处 C2664（`HostKVExtentCapability` vs `HostKVExtentReservation`，publish 返回 optional 但 valid/release/view 收裸）。方案 A = 5 处机械解引用。
+- **bundle 机制构建（CODE 34 轮）**：ninja_tests bundle 全量，上游多文件破损（context_store + vision_cpu M_PI + hadamard `__builtin_popcount`，证明上游测试从没在 MSVC 编过）。方案 D' = 官方 `STANDALONE` 机制独立 frontend exe。
+- **D' 成果（CODE 35 轮五关全过）**：`ninfer_qwen3_5_frontend_test` 独立 exe（1.25 GB / 12:48），退出码 0 = 全绿（含新契约断言）。静态调用链闭合：L2842 无条件调用 + L2856 return；新鲜度：补丁源 11:45 < obj 12:48。
+- **commit 分批（3 独立 commit）**：`22f696a` fix(tests) context_store 适配 / `0f7d18a` feat(frontend) Design C 补丁+单测 / `41beb3b` build(tests) STANDALONE。
+- **engine-main 同步**：Design C 4 文件经追加 commit `1f1014a` 进引擎快照，已推送私库。**fork 本地 3 commit 不推作者库**（`1314521gjy/ninfer-fusion-kvmem`），发布载体 = 私库 engine-main 分支（clone 检出即得含 Design C 完整可构建源码）。
+- **收尾**：CTest 残留 `Testing/` 清理 + .gitignore 加 `Testing/`（commit `f2fe2b4`）。
+- **终局路径**：① serve 重编（build-120a，Design C 生效）② 双 exe 思考探针（自编出正文 vs 官方成品空正文负控）。
+
 ---
 
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
