@@ -31,3 +31,6 @@ tools/
 
 # CTest 运行残留(误写主仓根的临时输出)
 Testing/
+
+# 新模型制品（大件，不入库）
+newmodel/
