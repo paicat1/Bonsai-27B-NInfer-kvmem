@@ -513,4 +513,29 @@
 
 ---
 
+## 十二、迁移施工 · 阶段二之一：STANDALONE 前端单测（**绿**，2026-10-08）
+
+> 承接 §11.5 第 1 条；目标是 S6 验收口径（"单测绿 + 实流 soak"）的**前半**。
+
+### 12.1 方法（**复用既有构建目录**，省 ~40 分钟）
+- 上游只在 `BUILD_TESTING=ON` 时 `add_subdirectory(tests)`（`fusion-engine-src/CMakeLists.txt:216-219`）；而 `BUILD_TESTING` 对**编译**的唯一影响是 L202-205 打开 `NINFER_BUILD_PRODUCT_SUPPORT` —— 既有目录已因 `NINFER_BUILD_APPS=ON` 使其为 ON（缓存核实 `NINFER_BUILD_APPS:BOOL=ON`）⇒ 开 `BUILD_TESTING=ON` **不触发任何引擎库重编**。
+- 故**不新建目录**（全新目录需重编全图；`[EVIDENCE]` `.ninja_log` 首末差 2,370,695 ms ≈ 39.5 分钟），改为**就地重配 `.temp/build-1208a`**，仅编译目标 `ninfer_qwen3_5_frontend_test`（STANDALONE，独立 exe）。
+- 脚本：`build/s6_1208a_test.ps1`（ASCII-only；configure + build 单目标 + run，**无删除动作**）。
+
+### 12.2 结果（**绿**）
+- `[EVIDENCE]` `[14/15] Building CXX object tests\CMakeFiles\ninfer_qwen3_5_frontend_test.dir\models\qwen3_5\test_frontend.cpp.obj` → `[15/15] Linking CXX executable tests\ninfer_qwen3_5_frontend_test.exe` → **`BUILD_EXIT=0`**。
+- `[EVIDENCE]` `EXE: ...\.temp\build-1208a\tests\ninfer_qwen3_5_frontend_test.exe`，**`TEST_EXIT=0`**；**复跑 2 次仍 0**（确定性）。
+- 件：**1256.3 MB**；sha256 `430B6B368CCB0A54021B4FDF5F322DE6BA027854C654455ED2588859E07BA415`。
+- 日志：`.temp/background-registry-…-job-20261008-133048-19432893.log`。
+
+### 12.3 覆盖度（为什么"退出码 0"**有效**）
+- 该测试**成功静默**（`check()` 仅失败时打印 stderr 并返回 1，`tests/models/qwen3_5/test_frontend.cpp:144-148`）；`main()` 汇总 **53 个子测试**，全过才 `return 0`（`test_frontend.cpp:2799-2856`）⇒ **无输出 + exit 0 = 53 项全过（非空跑）**。
+- **直接覆盖我方 Design C**：`a25012b` 改 `src/models/qwen3_5/frontend/output_session.cpp` + 本测试断言（thinking 阶段 stop 强制进 answer）⇒ 单测绿即 **Design C 与新基线 thinking 语义一致**；含 `test_thinking_budget_control` / `test_reasoning_split` / `test_reasoning_close_requires_boundary` / `test_reasoning_close_resolves_at_terminal` 等边界断言。
+
+### 12.4 待续
+- **soak + A4 双基线 A/B**（用户在场 / 可随时停 / 限时）：A4 = 池**未超**下的 prefill 死锁，须旧件（`engine/self-built/ninfer-serve.exe`）与新件同参（req#30 类负载：10 msgs / 32 tools / thinking medium / budget 16000）对照，判定 归属=上游遗留/新版引入/消失。
+- 收尾：产物清单**身份标签** → `engine-main` 快照同步 → 构建史收口 → 双分支推送。
+
+---
+
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
