@@ -5,7 +5,7 @@ REM  SELF-BUILT engine (sm_120a, MSVC-compiled, Design C patch)
 REM  Ternary Bonsai 2-27B v3 (full)
 REM
 REM  MODEL : models\Ternary-Bonsai-2-27B-ninfer-v3.ninfer
-REM  ENGINE: .temp\build-120a\apps\ninfer-serve.exe  (SELF-BUILT, 13:00:55)
+REM  ENGINE: engine\self-built\infer-serve.exe  (SELF-BUILT, 20261003 + all patches)
 REM  PORT  : 8095  (avoids official 8094, both can run side-by-side)
 REM
 REM  === WHAT DESIGN C FIXES ===
@@ -29,7 +29,7 @@ REM ============================================================
 setlocal
 set "ROOT=%~dp0"
 set "MODEL=%ROOT%models\\Ternary-Bonsai-2-27B-ninfer-v3.ninfer"
-set "ENGINE=%ROOT%.temp\\build-120a\\apps\\ninfer-serve.exe"
+set "ENGINE=%ROOT%engine\\self-built\\infer-serve.exe"
 
 if not exist "%MODEL%" (
   echo REFUSE: model not found: "%MODEL%"
@@ -37,7 +37,7 @@ if not exist "%MODEL%" (
   exit /b 3
 )
 if not exist "%ENGINE%" (
-  echo REFUSE: self-built ninfer-serve.exe missing (need .temp\build-120a\apps)
+  echo REFUSE: self-built ninfer-serve.exe missing (need engine\self-built)
   pause
   exit /b 4
 )
