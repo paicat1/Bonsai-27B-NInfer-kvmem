@@ -14,7 +14,7 @@
 | **引擎源码** | NInfer v0.11.0 + KVMem 环 | Neroued（NInfer）· 1314521gjy（KVMem 环融合） |
 | **引擎成品** | `ninfer-serve-120a.exe` + 依赖 DLL | 沈三殊成品包 `infer-engine-sm120a-20261002` |
 
-### 本项目做的 —— `engine/self-built/`
+### 本项目做的 —— `engine/self-built-20261008/`（现役；回退锚在 `engine/self-built/`）
 | 项 | 内容 |
 |---|---|
 | **自行编译的引擎 + 工具链** | `ninfer-serve`（推理服务）· `ninfer`（主程序）· `ninfer-perplexity`（评估）· `ninfer-calibrate`（校准）＋ 运行环境（DLL） |

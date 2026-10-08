@@ -30,10 +30,12 @@ import urllib.error
 ROOT        = os.path.dirname(os.path.abspath(__file__))          # 项目根（便携：不写死盘符）
 ENGINE      = os.path.join(ROOT, "engine", "ninfer-serve-120a.exe")            # 官方成品（无 Design C）
 ENGINE_DIR  = os.path.dirname(ENGINE)
-ENGINE_SELF = os.path.join(ROOT, "engine", "self-built", "ninfer-serve.exe")   # 自编（含 Design C）
+ENGINE_SELF = os.path.join(ROOT, "engine", "self-built-20261008", "ninfer-serve.exe")   # 自编·现役（20261008 + 全部补丁）
+ENGINE_PREV = os.path.join(ROOT, "engine", "self-built", "infer-serve.exe")           # 自编·回退锚（20261003 + 全部补丁）
 ENGINE_OPTIONS = {
     "official": ("官方成品",       ENGINE),
-    "self":     ("自编(Design C)", ENGINE_SELF),
+    "self":      ("自编·现役(20261008)",  ENGINE_SELF),
+    "self_prev": ("自编·回退锚(20261003)", ENGINE_PREV),
 }
 MODEL       = os.path.join(ROOT, "models", "Ternary-Bonsai-2-27B-ninfer-v3.ninfer")
 CONFIG_FILE = os.path.join(ROOT, "ninfer_launcher_profiles.json")
