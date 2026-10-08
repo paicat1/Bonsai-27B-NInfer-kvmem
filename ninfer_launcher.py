@@ -31,7 +31,7 @@ ROOT        = os.path.dirname(os.path.abspath(__file__))          # 项目根（
 ENGINE      = os.path.join(ROOT, "engine", "ninfer-serve-120a.exe")            # 官方成品（无 Design C）
 ENGINE_DIR  = os.path.dirname(ENGINE)
 ENGINE_SELF = os.path.join(ROOT, "engine", "self-built-20261008", "ninfer-serve.exe")   # 自编·现役（20261008 + 全部补丁）
-ENGINE_PREV = os.path.join(ROOT, "engine", "self-built", "infer-serve.exe")           # 自编·回退锚（20261003 + 全部补丁）
+ENGINE_PREV = os.path.join(ROOT, "engine", "self-built", "ninfer-serve.exe")           # 自编·回退锚（20261003 + 全部补丁）
 ENGINE_OPTIONS = {
     "official": ("官方成品",       ENGINE),
     "self":      ("自编·现役(20261008)",  ENGINE_SELF),
