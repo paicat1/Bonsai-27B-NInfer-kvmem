@@ -133,6 +133,8 @@ engine/ninfer-serve-120a.exe      models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer -
 - **解码峰值 748.6 tok/s**（真实工具对话；dflash2 K=7 + ngram 混合）。
 - 两值均取自引擎自报日志。
 
+![真实负载实跑 —— 控制台日志：decode 峰值 748.6 tok/s（KVMem SELECT / throughput / req#done）](docs/images/run-20261007-decode748.png)
+
 ### 思考预算
 - `--default-thinking-budget N`（服务端级）治"思考烧光输出预算 → 空正文"。
 - 注意：**OpenAI chat 端点不解析请求体里的 `thinking_budget`**（只有 Anthropic 的 `thinking.budget_tokens` 会被读），故只能由服务端参数设置。
