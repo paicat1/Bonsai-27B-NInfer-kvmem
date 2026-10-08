@@ -27,9 +27,13 @@
 // 【已知边界（写死在代码里，别当没看见）】
 //   * **多 lane 不安全**：mean-K 索引是**全进程一份**（mean_k_index.h:248-251 自陈），本探针的
 //     score 缓冲同样是全进程一份 ⇒ 只在单路（--max-concurrency 1）下有意义。多路时必须 per-lane。
-//   * 只对"短 query span"打分（≤ NINFER_TERNARY_KVMEM_SCORE_MAXQ，默认 256 个 token）：文档
-//     ingest 那种几万 token 的 chunk 打分代价是 O(块数×query长)，会拖死 prefill；而且那种 chunk
-//     的"query"本来也不是检索 query。
+//   * query span 的**分段**口径：≤ MAXQ（默认 256）的 span 一次内核调用打完；**更长的 span 从
+//     2026-10-04 起改为"取该 span 末尾 ≤ SCORE_SPAN_MAX（默认 4096）个 token、按 MAXQ 切段求和"**
+//     （B05：此前是整段跳过 ⇒ 该 chunk 一分不打 ⇒ KEPT 0 ⇒ 回落词法排序）。分段在数学上是正确的：
+//     内核用 `atomicAdd` 累加、契约是 `sum_b score[b] == n_query_tokens`（kvmem_retrieve.h:117）
+//     ⇒ 段和 == 整段一遍。文档 ingest 那种几万 token 的 chunk 仍受 SCORE_SPAN_MAX 约束
+//     （O(块数×query 长) 会拖死 prefill）；`NINFER_TERNARY_KVMEM_SCORE_SPAN_SEGMENT=0` 回到旧的
+//     跳过行为 —— 那也正是这条改动的**负控**。
 //   * ★ 2026-09-26（语义档）：NINFER_TERNARY_KVMEM_SCORE_QUERY_TAIL=N ⇒ 只把 chunk 的最后 N 个
 //     token 当检索 query 打分（官方 kvmem_set_query_span 的等价物：query 是"问"，不是整段
 //     ingest），MAXQ 的门限看 **span 长度**、不看 chunk 长度 —— 解掉"探针只在短 query chunk
@@ -79,11 +83,26 @@ inline bool kvmem_score_enabled() noexcept {
     return on;
 }
 
+// 数值旋钮的读法：**0 与负数一律当"未设"**。这是刻意口径，不是疏漏 ——
+// 例如 QUERY_TAIL 给 0 会让打分窗口变空、"默默什么都不打"，比回落默认值危险得多
+// （见 accumulate 里那段 "未设/0 ⇒ 64 更安全" 的注释）。
+// ⚠️ 布尔开关**不要**用它：`=0` 在这里被读成"未设"⇒ 回落成默认值 ⇒ 负控永不生效（B25）。
+// 布尔开关一律用下面的 kvmem_score_env_flag()。
 inline std::int32_t kvmem_score_env_i32(const char* name, std::int32_t fallback) noexcept {
     const char* v = std::getenv(name);
     if (v == nullptr || v[0] == '\0') { return fallback; }
     const long parsed = std::strtol(v, nullptr, 10);
     return parsed > 0 ? static_cast<std::int32_t>(parsed) : fallback;
+}
+
+// 布尔开关的读法：**设了就用** —— `=0` 就是关、`=非0` 就是开，只有"未设/空串"才回落 fallback。
+// 存在的理由（B25，2026-10-07 实测）：`NINFER_TERNARY_KVMEM_SCORE_SPAN_SEGMENT=0` 是本改动
+// **文档化的负控**，但它若走 kvmem_score_env_i32，0 会被当成"未设"⇒ 回落 1 ⇒ 该负控永不生效、
+// 与其配对的 "skip long query span" 分支不可达（实测：三条臂上正控/负控逐行同值）。
+inline bool kvmem_score_env_flag(const char* name, bool fallback) noexcept {
+    const char* v = std::getenv(name);
+    if (v == nullptr || v[0] == '\0') { return fallback; }
+    return std::strtol(v, nullptr, 10) != 0;
 }
 
 // ---- 探针状态（进程级单例，与 mean-K 索引同寿命）---------------------------------------------
@@ -118,6 +137,11 @@ struct KvMemScoreProbe {
     std::int32_t scored_n_blocks   = 0;    // 这份分数描述块 [0, scored_n_blocks)（finish 时登记）
     bool scored_last_chunk = false;        // 最近一个 prefill chunk 真打过分（语义档的准入闸）
     std::int32_t layers_total    = 0;
+    // B08 证据：本轮索引**真的**从多少层喂入（= harvest 的逐层覆盖戳计数，见 append_round 的跳过
+    // 计数）。`harvest_layers == harvest_layers_total` 就是"层 0 也在索引里"的正向读数；-1 = 本轮
+    // 没有报（未开环 / 未 arm / 走的是旧路径）。
+    std::int32_t harvest_layers       = -1;
+    std::int32_t harvest_layers_total = 0;
     std::int32_t n_heads         = 0;
     std::int32_t n_kv_heads      = 0;
     std::int32_t head_dim        = 0;
@@ -125,6 +149,7 @@ struct KvMemScoreProbe {
     bool scored_this_chunk = false;        // 本 chunk 真的累加过（否则 finish 打出来的是全零假日志）
     bool failed   = false;                 // 出过致命几何/分配错 ⇒ 之后一律不打分（但引擎继续跑）
     bool logged_once = false;
+    bool logged_span_segment = false;   // B05: 长 span 改为切段打分，只喊一次（它是"行为变了"的证据行）
 };
 
 inline KvMemScoreProbe& kvmem_score_probe() {
@@ -160,6 +185,15 @@ inline std::int32_t kvmem_score_scored_blocks() noexcept {
 // 交到这里，打分时再与当前 chunk 求交 —— 这就是那份"两步"的落地，不再靠"尾 N token"去猜问句在哪。
 //
 // 与整个探针一样，这份状态是**进程级**的 ⇒ 只在 --max-concurrency 1 下有意义（多路必须 per-lane）。
+// B08：本轮索引的逐层覆盖读数 —— `MeanKIndex::append_round` 只喂"本轮真被写过的层"，这里把它的计数
+// 送到 SELECT 行（`harvest_layers=K/L`）。K == L 即"层 0 也在索引里"；K < L 时 append_round 另有一行
+// 说明跳过的是哪些层、以及为什么（那些槽里还是上一轮的字节）。
+inline void kvmem_score_set_harvest_layers(std::int32_t harvested, std::int32_t total) noexcept {
+    KvMemScoreProbe& p     = kvmem_score_probe();
+    p.harvest_layers       = harvested;
+    p.harvest_layers_total = total;
+}
+
 // begin < 0 = 未知 ⇒ 回落 QUERY_TAIL 尾窗规则：那既是既有行为，也是这条改动的**负控**。
 inline void kvmem_score_set_query_span(std::int32_t begin, std::int32_t end) noexcept {
     KvMemScoreProbe& p = kvmem_score_probe();
@@ -296,7 +330,7 @@ inline void kvmem_score_accumulate(std::int32_t fidx, const void* q, std::int32_
     //   · 只有 span 本身 ≤ MAXQ（真正的"问句跨度"）才旁路尾窗规则 —— 那才是这条改动的用武之地。
     const bool abs_span_known = p.abs_query_begin >= 0 && p.abs_query_end > p.abs_query_begin &&
                                 p.abs_chunk_begin >= 0 && chunk_tokens > 0 &&
-                                kvmem_score_env_i32("NINFER_TERNARY_KVMEM_SCORE_SPAN_OFF", 0) == 0;
+                                !kvmem_score_env_flag("NINFER_TERNARY_KVMEM_SCORE_SPAN_OFF", false);
     bool span_applied = false;
     if (abs_span_known) {
         const std::int32_t local_begin = p.abs_query_begin - p.abs_chunk_begin;
@@ -330,17 +364,53 @@ inline void kvmem_score_accumulate(std::int32_t fidx, const void* q, std::int32_
         span_begin  = chunk_tokens - tail;
         span_tokens = tail;
     }
-    if (span_tokens > maxq) {   // query 太长：不打分（它也不是检索 query）
-        if (!p.logged_once) {
-            p.logged_once = true;
-            std::fprintf(stderr, "kvmem_score: skip long query span tokens=%d (> MAXQ=%d); chunk=%d begin=%d\n",
-                         span_tokens, maxq, chunk_tokens, span_begin);
+    // LOCAL FIX (B05): a span longer than MAXQ used to be skipped outright -- the scorer did nothing
+    // for that chunk, the ring fell back to the lexical ranking, and the symptom was a retrieval that
+    // "kept nothing" (ledger B05). The span's official meaning is "the LAST user turn"
+    // (frontend.cpp:1068-1097, matching kvmem-qw3's service-layer rule), so a long span means a long
+    // user turn, not a broken one -- and the official service layer captures it WHOLE, having removed
+    // its 512-token truncation and allocated query rows dynamically (see
+    // 储备技术-可借鉴修复调研-本地.md §5.2). Our scoring kernel has a fixed query tile of MAXQ rows, so
+    // the same coverage is reached by scoring the span in MAXQ-sized segments and SUMMING them: the
+    // kernel accumulates with atomicAdd (kvmem_retrieve_launch.cu:243) under the contract
+    // `sum_b score[b] == n_query_tokens` (kvmem_retrieve.h:117), so a sum over segments equals one
+    // pass over the whole span -- and the finish-time oracle still holds, because it is told how many
+    // tokens were actually scored (see query_span_tokens below).
+    // Two bounds keep the cost sane and honour the D-12 measurement:
+    //   * at most SCORE_SPAN_MAX tokens are scored per span (default 4096 = 16 segments), taken from
+    //     the END of the span: the question sits at the end of a user turn, while the far end of a long
+    //     message is where the filler D-12 blamed lives (measured: widening the query from 64 to 256
+    //     tokens cost turn2 6/6 -> 2/6 at pool 4000);
+    //   * SCORE_SPAN_SEGMENT=0 restores the skip, which is also this change's negative control.
+    //     ⚠️ 这个开关**必须**走 kvmem_score_env_flag（不是 env_i32）：后者把 `=0` 读成"未设"⇒
+    //     回落成 1 ⇒ 这条负控曾经**永不生效**、下面的 skip 分支不可达（B25，2026-10-07 实测：
+    //     三条臂上正控与负控的读数逐行同值）。改回 env_i32 就会把这条负控重新废掉。
+    const bool segment_span     = kvmem_score_env_flag("NINFER_TERNARY_KVMEM_SCORE_SPAN_SEGMENT", true);
+    const std::int32_t span_max = kvmem_score_env_i32("NINFER_TERNARY_KVMEM_SCORE_SPAN_MAX", 4096);
+    if (span_tokens > maxq) {
+        if (!segment_span || maxq <= 0) {
+            if (!p.logged_once) {
+                p.logged_once = true;
+                std::fprintf(stderr, "kvmem_score: skip long query span tokens=%d (> MAXQ=%d); chunk=%d begin=%d\n",
+                             span_tokens, maxq, chunk_tokens, span_begin);
+            }
+            return;
         }
-        return;
+        const std::int32_t scored = span_max > 0 && span_tokens > span_max ? span_max : span_tokens;
+        if (!p.logged_span_segment) {
+            p.logged_span_segment = true;
+            std::fprintf(stderr,
+                         "kvmem_score: long query span %d token(s) > MAXQ=%d -> scoring its last %d "
+                         "token(s) in %d segment(s); span=[%d,%d) chunk=[%d,%d)\n",
+                         span_tokens, maxq, scored, (scored + maxq - 1) / maxq, span_begin,
+                         span_begin + span_tokens, p.abs_chunk_begin, p.abs_chunk_begin + chunk_tokens);
+        }
+        span_begin += span_tokens - scored;   // keep the END of the span
+        span_tokens = scored;
     }
     p.chunk_tokens      = chunk_tokens;   // live 平面的行数（= q_layer_stride）
     p.query_span_begin  = span_begin;
-    p.query_span_tokens = span_tokens;    // 供 finish 的 oracle 自检用（正确口径 = span 的 token 数）
+    p.query_span_tokens = span_tokens;    // 供 finish 的 oracle 自检用（正确口径 = 真正打分的 token 数）
 
     ops::MeanKIndex* index = ops::mean_k_index_for(p.layers_total, p.n_kv_heads, p.head_dim,
                                                   p.capacity_blocks);
@@ -353,27 +423,34 @@ inline void kvmem_score_accumulate(std::int32_t fidx, const void* q, std::int32_
     KvMemRetrieveConfig cfg;
     cfg.n_layers          = 1;                      // 逐层调用
     cfg.n_layers_total    = p.layers_total;         // head_w = 1/(总层数×query 头数)
-    cfg.n_query_tokens    = span_tokens;
     cfg.n_heads           = p.n_heads;
     cfg.n_kv_heads        = p.n_kv_heads;
     cfg.head_dim          = p.head_dim;
     cfg.n_blocks          = p.n_blocks;
     cfg.q_layer_stride    = chunk_tokens;           // live plane 的 token 数（>= n_query_tokens）
     cfg.kbar_layer_stride = p.capacity_blocks;      // >= n_blocks
-    cfg.q_token_begin     = span_begin;
     cfg.budget_blocks     = 0;                      // 掩码只用在这里；探针不设带（Official 规则见下）
     cfg.sink_blocks       = 0;
     cfg.recent_blocks     = 0;
     cfg.mask_mode         = KvMemRetrieveMaskMode::Never;   // 探针要"全历史"的原始分数，不套带掩码
     cfg.dtype             = KvMemRetrieveDtype::BF16;
 
-    const cudaError_t status =
-        ops::kvmem_retrieve_scores(cfg, p.score, q, static_cast<const float*>(sums.data),
-                                   p.block_tokens_dev, stream);
-    if (status != cudaSuccess) {
-        std::fprintf(stderr, "kvmem_score: launch failed layer=%d: %s\n", fidx, cudaGetErrorString(status));
-        kvmem_score_fail("launch");
-        return;
+    // One call per MAXQ-sized segment -- a single call for the ordinary short span, which keeps the
+    // common path bit-identical. `p.score` is accumulated by the kernel, so the segments sum exactly
+    // as one pass over the whole span would have.
+    for (std::int32_t offset = 0; offset < span_tokens; offset += maxq) {
+        const std::int32_t segment = std::min(maxq, span_tokens - offset);
+        cfg.n_query_tokens = segment;
+        cfg.q_token_begin  = span_begin + offset;
+        const cudaError_t status =
+            ops::kvmem_retrieve_scores(cfg, p.score, q, static_cast<const float*>(sums.data),
+                                       p.block_tokens_dev, stream);
+        if (status != cudaSuccess) {
+            std::fprintf(stderr, "kvmem_score: launch failed layer=%d: %s\n", fidx,
+                         cudaGetErrorString(status));
+            kvmem_score_fail("launch");
+            return;
+        }
     }
     p.scored_this_chunk = true;
 }
@@ -442,7 +519,8 @@ inline void kvmem_score_finish(const char* label, std::int32_t query_tokens,
     const std::int32_t kept_last  = sel.kept.empty() ? -1 : sel.kept.back();
 
     // ★ 把**选中的块号本身**打出来：没有它就无法核对"含针的块有没有被选中"（聚合量 runs/skip 做不到）。
-    //   与官方实现同形（它也是逐行 `KVMEM_TRACE selected <ids...>`）。只在短 query chunk 上出现。
+    //   与官方实现同形（它也是逐行 `KVMEM_TRACE selected <ids...>`）。短 span 与切段后的长 span 都会
+    //   出现（B05）；只有 `SCORE_SPAN_SEGMENT=0` 的旧跳过路径不再产出这一行 —— 那正是负控要看的东西。
     {
         std::fprintf(stderr, "kvmem_score: KEPT");
         for (std::size_t i = 0; i < sel.kept.size(); ++i) {
@@ -456,7 +534,7 @@ inline void kvmem_score_finish(const char* label, std::int32_t query_tokens,
                  "recent_blocks=%d kept=%zu runs=%d skip=%d window_tokens=%zu "
                  "sink_kept=%d recent_kept=%d scored_kept=%d candidates=%d kept_range=[%d,%d] "
                  "sum_score=%.3f query_tokens=%d span_mode=%s span_abs=[%d,%d) chunk_abs=%d "
-                 "span_local=[%d,%d) oracle_ok=%d scale_floor=%.6f\n",
+                 "span_local=[%d,%d) oracle_ok=%d scale_floor=%.6f harvest_layers=%d/%d\n",
                  label, p.n_blocks, scfg.budget_blocks, scfg.sink_blocks, scfg.recent_blocks,
                  sel.kept.size(), runs, skip,
                  sel.kept.size() * static_cast<std::size_t>(p.block_tokens), sel.sink_kept,
@@ -464,7 +542,8 @@ inline void kvmem_score_finish(const char* label, std::int32_t query_tokens,
                  q_used, p.abs_query_begin >= 0 ? "abs" : "tail", p.abs_query_begin, p.abs_query_end,
                  p.abs_chunk_begin, p.query_span_begin, p.query_span_begin + p.query_span_tokens,
                  (q_used > 0 && sum_score > 0.5 * q_used && sum_score < 2.0 * q_used) ? 1 : 0,
-                 static_cast<double>(ops::kvmem_retrieve_scale(p.head_dim)));
+                 static_cast<double>(ops::kvmem_retrieve_scale(p.head_dim)), p.harvest_layers,
+                 p.harvest_layers_total);
 }
 
 // 逐块分数导出（给离线判据用：核对"含针的块"有没有被选中）。只在 switch 打开且本 chunk 打过时写。

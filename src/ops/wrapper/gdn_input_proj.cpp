@@ -760,9 +760,21 @@ void require_split_profile(const Tensor& x, const Weight& qk_weight, const Weigh
 
 bool t2_two_parent(const Weight& qk_weight, const Weight& value_z_weight) {
     const bool qk = is_ternary(qk_weight.qtype);
-    // The I line's require_ternary_split_parents rule, verbatim in substance: both ternary, and the
-    // same format.
-    if (qk != is_ternary(value_z_weight.qtype) || qk_weight.qtype != value_z_weight.qtype) {
+    const bool vz = is_ternary(value_z_weight.qtype);
+    // The I line's require_ternary_split_parents rule, verbatim in substance: BOTH parents ternary and
+    // the same format.
+    // B26 fix (2026-10-07): that rule is about the TERNARY pair only. Two NON-ternary parents of
+    // DIFFERENT formats are the documented split profile -- require_split_profile() just below demands
+    // qk=Q4_G64_FP16 and value/z=Q5_G64_FP16 -- so that combination must return false, not throw. Before
+    // this fix the predicate rejected the very shape the shape checks require, and every test that built
+    // it died on an uncaught std::invalid_argument (0xC0000409, no output). A mixed ternary /
+    // non-ternary pair, and two ternary parents of different formats, still throw: admitting them would
+    // run one packing's arithmetic over the other's bytes.
+    if (qk != vz) {
+        throw std::invalid_argument(
+            "gdn_input_proj: both ternary split parents must use the same format");
+    }
+    if (qk && qk_weight.qtype != value_z_weight.qtype) {
         throw std::invalid_argument(
             "gdn_input_proj: both ternary split parents must use the same format");
     }
@@ -827,21 +839,28 @@ std::size_t t2_two_parent_projection_bytes(std::int32_t min_columns, std::int32_
         WorkspaceLayoutBuilder layout;
         if (!detail::t2_a8_admits(policy) ||
             !detail::t2_a8_layout_activations(layout, 5120, columns)) {
+            // a8 route not taken: the BF16 fallback planes are what the launch actually allocates.
+            (void)layout.alloc(DType::BF16, {4096, columns});
+            (void)layout.alloc(DType::BF16, {6144, columns});
+        } else {
+            // ⚠️ The a8 question above is a WIDTH question, but whether this MODEL takes that route is a
+            // FORMAT question: t2_a8_supported refuses PTQ1_0 below its own tile floor, so a PTQ1 model
+            // falls back to the two BF16 planes t2_two_parent_project allocates -- and a format-blind
+            // capacity call had reserved only the a8 planes. At T=1 the gap hid inside the arena's slack,
+            // at T>=65 the a8 route was taken anyway, and it surfaced exactly at the
+            // speculative-verify width (T=5: "text/layers/0 verify columns=5: bad allocation").
+            // Reserving the fallback planes as well is a superset at these row counts (the registered
+            // pair's 4096 + 6144 rows of BF16 per column against the int8 tile's 5120 bytes), so
+            // whichever route the launch takes is covered. The row counts are the registered GDN pair's
+            // (kQkRows/kValueRows are variant-local further down this file and not visible here).
+            // B29 fix (2026-10-07): these two lines used to run UNCONDITIONALLY, so on the branch above
+            // the very same two planes were allocated a second time and layout.peak_bytes() came out
+            // exactly 2x the true need -- measured `gdn_input_proj_conv_record`: query 122,880 vs
+            // execution peak 81,920 at T2/B1/T=2, and the gap was always 10240 channels x columns x 2
+            // bytes. They belong to the a8 branch only.
             (void)layout.alloc(DType::BF16, {4096, columns});
             (void)layout.alloc(DType::BF16, {6144, columns});
         }
-        // ⚠️ The a8 question above is a WIDTH question, but whether this MODEL takes that route is a
-        // FORMAT question: t2_a8_supported refuses PTQ1_0 below its own tile floor, so a PTQ1 model
-        // falls back to the two BF16 planes t2_two_parent_project allocates -- and a format-blind
-        // capacity call had reserved only the a8 planes. At T=1 the gap hid inside the arena's slack,
-        // at T>=65 the a8 route was taken anyway, and it surfaced exactly at the
-        // speculative-verify width (T=5: "text/layers/0 verify columns=5: bad allocation").
-        // Reserving the fallback planes as well is a superset at these row counts (the registered
-        // pair's 4096 + 6144 rows of BF16 per column against the int8 tile's 5120 bytes), so
-        // whichever route the launch takes is covered. The row counts are the registered GDN pair's
-        // (kQkRows/kValueRows are variant-local further down this file and not visible here).
-        (void)layout.alloc(DType::BF16, {4096, columns});
-        (void)layout.alloc(DType::BF16, {6144, columns});
         bytes = std::max(bytes, layout.peak_bytes(1));
     }
     return bytes;
