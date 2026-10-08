@@ -16,7 +16,7 @@
 | 上游底子 | NInfer v0.11.0 + KVMem 环 + 沈三殊 v3 成品包 | 沈三殊（技术起点）+ Ambolio 移植 + CraneBW 内核 |
 | 本项目做的 | 自行编译引擎 + 工具链 + 启动器 / 日志工具 + 验证 | 移植适配 / 改 CMake / 合内核 / 自产 v2 制品 |
 | 架构 | 原生 sm_120a | 改 CMake `89\|120a` |
-| **KV / 显存机制** | **KVMem 环**：显存小池 + 主机内存卸载（`--kv-capacity` 可**小于**上下文） | Device/Host **双层 KV**（被动容量） |
+| **KV / 显存机制** | **KVMem 环**：显存小池 + 主机内存卸载（`--kv-capacity` 可**小于**上下文）；KV 精度多档（`k8v4` / `nvfp4` / `rk*` / `fp8` / `bf16`…） | Device/Host **双层 KV**（被动容量）；精度档 `fp8` / `bf16` / `k8v4` / `nvfp4` |
 | 长上下文 | **KVMem 环（主动检索）** | 双层 KV（被动容量） |
 | 投机解码 | dflash2 + MTP + ngram 混合 | MTP / DFlash2 |
 | 预填充极值 | 3,820 tok/s | 2,850 tok/s |
@@ -26,6 +26,9 @@
 | 服务端口 | 8094 / 8091 / 8095 | 18787 |
 
 > ⚠️ 两仓极值来自**不同语料与投机组合**，仅作量级对照。
+
+- **本仓 = 进阶**：姊妹仓是初步的；本仓在**预测解码（+ngram 混合）**与**融合 KVMem**上更全。
+- 两仓**彼此隔离、互为对照**。
 
 ## 二、上游给的 vs 本项目做的
 
@@ -85,7 +88,7 @@ engine/ninfer-serve-120a.exe      models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer -
 
 ### 运行前提
 - **显存**：起服前建议腾出约 **13 GiB**；紧张时先摘 `--vision`、再降 KV 精度或池。
-- **主机内存**：启动会锁定 **pinned（不可换出）内存**（默认 `--host-kv-mib 16384`）。
+- **主机内存**：启动会锁定 **pinned（不可换出）内存**（host state + host KV，默认 `--host-kv-mib 16384`）；**内存紧张机器可能在启动阶段失败**（报错对着 host KV）。降配：`--host-kv-mib 8192` / 调小 host state。
 - 首次启动的 `calibrating routes` 需 **10–50 秒**，请勿中断。
 
 ## 五、项目结构
@@ -118,19 +121,28 @@ engine/ninfer-serve-120a.exe      models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer -
 | 模型 | `models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer` = 9,520,051,456 B / `CDC4810B…` |
 | 上下文 / KV 池 | 默认 262144（256K）/ 17920 token |
 
+> ⚠️ 上游资料里写 `42CD0735…` / 1,343,609,856 B 的是**修复前旧包**的 hash，勿照用。
+
 ### KVMem 环（长上下文机制）
 - **显存小池 + 主机内存卸载**：`--kv-capacity` 可**小于**上下文，超出设备池的 KV 分页下放主机内存，由**内容打分检索**决定哪些块常驻。
 - **五个环境变量必设**（缺一 = 能起服但**静默答错**）：`NINFER_KV_WINDOW` / `NINFER_KV_RETRIEVE` / `NINFER_KV_RING` / `NINFER_HOST_PAGEABLE` / `NINFER_KV_REUSE_HOSTBACKED`（启动器自动注入）。
 - **内容打分默认开**；判活看日志 `kvmem_score: SELECT …` 行。
+- **口径陷阱**：上游 docs 分“当前 / 历史”两批，读错必误判。
 
 ### 投机解码（dflash2 / MTP / ngram）
 - 档位：**dflash2（K1–15）· MTP（K1–5）·以及二者 + ngram 混合**；启动器可切换。
 - **K 并非越大越好**：dflash2 **K≥10 收益崩塌**，**K=7 为日常优选**。
 - **接受率强依赖语料**：数数字语料接受率 ~91%，散文骤降至 3.7%（中）/ 13.4%（英）。
+- **dflash 深度收益强依语料**：数数字（可预测）K 越深越快（K4 322 → K12 654 tok/s）；散文（不可预测）**K=7 最优**，K12 反而略降 ⇒ 与上游教程“不可预测输出 draft 12 更慢”吻合。
+- **K=7 = 日常甜点**：真实工具对话用 **dflash2 K=7 + ngram 混合投机** → 接受率 35.7–94.4%、decode 峰值 748.6；而 **d12 + 纯 dflash** 同场景接受率仅 ~22.7%。
 
 ### 实测（RTX 5080）
-- **预填充极值 3,820 tok/s**（`nvfp4` / 224K 档）。
-- **解码峰值 748.6 tok/s**（真实工具对话；dflash2 K=7 + ngram 混合）。
+- **起服与就绪判据**：起服监听 `127.0.0.1:8094`；`GET /v1/models` 返回 200 + **真发一条请求** 200（判活必须真发请求，`/v1/models` 200 ≠ 健康）。
+- **长文检索验证**：正文埋针 + **问句独立成回合** ⇒ 问句 span ≤ `MAXQ=256` ⇒ 打分真跑（`scored_kept>0`）、针被答出、kept 覆盖针位。
+- **同口径 A/B（数数字 / 中文散文 / 英文散文）**：同一 dflash 档下，数数字接受率 **91.5%** 而散文骤降到 **3.7%（中）/ 13.4%（英）** ⇒ “decode 高”**仅对数数字语料成立**；差距本质是**语料效应**（接受率是强内容依赖指标，不能用合成填充文本测）。
+- **自编引擎（sm_120a）**：源码**全树 MSVC 构建成功**（3 类编译补丁）+ **Design C 补丁**——双 exe 对照实测：**自编 serve 的思考预算生效（稳定输出正文），官方成品不解析该字段**。
+- **真实负载实跑（2026-10-07，19 请求，32 工具对话）**：档位 **dflash2 K=7 + 思考预算 16000**，KV 163,840 **全驻显存**（free 0.84 GiB）。**瞬时峰值 decode 748.6 tok/s**；请求级 decode 180–655、**mixed speculation 接受率 35.7–94.4%**（长输出 ngram 命中 ≈98%）；续写缓存 99.9–100%、TTFT 0.18–0.29 s。⇒ 真实负载同样能跑高——**关键在 K=7 + ngram 混合投机**。
+- **预填充极值 3,820 tok/s**（配置 `--kv-dtype nvfp4 --max-context 229376`，KV 全驻）：`req#2 done | prompt 8,979 | prefill 3.82k tok/s` —— 全区间最高。
 - 两值均取自引擎自报日志。
 
 ![真实负载实跑 —— 控制台日志：decode 峰值 748.6 tok/s（KVMem SELECT / throughput / req#done）](docs/images/run-20261007-decode748.png)
@@ -145,7 +157,8 @@ engine/ninfer-serve-120a.exe      models/Ternary-Bonsai-2-27B-ninfer-v3.ninfer -
 - **Neroued**：NInfer 上游作者（C++20 / CUDA）。[`Neroued/ninfer`](https://github.com/Neroued/ninfer)
 - **1314521gjy**：KVMem 环融合。[`1314521gjy/ninfer-fusion-kvmem`](https://github.com/1314521gjy/ninfer-fusion-kvmem)
 - **Ambolio**（[`Ambolio/ninfer-4090-windows`](https://github.com/Ambolio/ninfer-4090-windows)）+ **CraneBW**（[`CraneBW/ninfer-ternary-bonsai-ada`](https://github.com/CraneBW/ninfer-ternary-bonsai-ada)）：姊妹仓上游底子。
-- **模型根基**：Qwen Team 架构 + unsloth NVFP4 量化 + z-lab DFlash 权重。
+- **ashalliants / Warlax / TertiumOrganum1 / UDPSendToFailed / IMGillusion** 等 NInfer 整合线与各 fork 作者：引擎整合与内核贡献者。
+- **模型根基**：Qwen Team 架构 + unsloth NVFP4 量化 + z-Lab DFlash 权重。
 
 ## 声明
 
