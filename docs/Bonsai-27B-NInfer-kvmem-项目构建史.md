@@ -480,4 +480,37 @@
 
 ---
 
+## 十一、迁移施工 · 阶段一（重放 → 全图构建 → 起服验证，2026-10-08）
+
+> 纪律（用户 2026-10-08 令）：**每轮施工完自动完善本节**，不等催。
+
+### 11.1 重放补丁到 20261008 基线（**零冲突**）
+- 分支 `s6-20261008`（基于 tag `engine-v0.11.0-kvmem-20261008` / tip `2852f6f`）。
+- cherry-pick 我方 **3 组产品补丁**（**零冲突**，CODE 预判成立）：
+  - `5b07bc1` fix(engine)：MSVC 三类编译兼容（C2326/C3495/C2026）—— 7 files, +89 −19
+  - `a25012b` feat(frontend)：**Design C** —— 2 files, +18 −5
+  - `3b9dc83` build(tests)：STANDALONE —— 1 file, +1
+- **未重放**：`22f696a`（context_store 适配 → **退役**，上游 20261008 已自修）；3 个 docs commit（上游 README/NOTICE/docs 已变）。
+
+### 11.2 全图构建（**零错误**）
+- 新构建脚本 `build/s6_1208a.bat`（SRC = `s6-20261008` 源码树；BUILD = `.temp\build-1208a`；复用旧 `vcpkg_installed`）。
+- `[EVIDENCE]` `[1088/1089] Linking CXX executable apps\ninfer-serve.exe` → `[1089/1089]`；**`BUILD_EXIT=0`**。
+- ⚠️ **教训（施工输入）**：脚本**首版写了中文注释** ⇒ cmd 按 OEM/ANSI 解析乱码、破坏变量 ⇒ 构建失败；**改 ASCII-only 后通过**（既有纪律"`.bat` 注释一律 ASCII"再次应验）。
+
+### 11.3 产物落位（**不覆盖回退锚**）
+- 新件 → `engine/self-built-20261008/`：4 exe（serve 1271.7 MB · ninfer 1270.3 · perplexity 1268.9 · calibrate 962.3）+ 8 DLL。
+- **回退锚全部未动**：`engine/self-built/`（旧自编）· `engine/ninfer-serve-120a.exe`（20261003 成品）· `engine/upstream-20261008/`（新成品）。
+
+### 11.4 起服验证（**版本串自证**）
+- `[EVIDENCE]` `build engine-v0.11.0-kvmem-20261008-3-g3b9dc83` ⇒ **新基线 + 我方 3 补丁**（`-3-g3b9dc83` = HEAD）。
+- `capacity | KV 17,920 · pages 280/4,096 · free 5.38 GiB`（新基线特征）；`/v1/models` 200；实发 200（"1+1 等于 2。"）。
+- 日志：`logs/s6_20261008_selfbuilt.log`。
+
+### 11.5 待续
+- **STANDALONE 单测**（需 `BUILD_TESTING=ON` 的测试构建目录）。
+- **soak + A4 双基线 A/B**（用户在场 / 可随时停 / 限时）。
+- 收尾：产物清单**身份标签** → `engine-main` 快照同步 → 构建史收口 → 双分支推送。
+
+---
+
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
