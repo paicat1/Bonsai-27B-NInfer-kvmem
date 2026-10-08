@@ -639,12 +639,23 @@
 
 ### 15.3 推送执行与远端硬证
 
-- **2026-10-08 夜：推送受阻（环境侧，非仓库问题）。** `[EVIDENCE]` 探测矩阵：
-  - 代理 `7890` **在监听**，`curl --proxy` 得到 `HTTP/1.1 200 Connection established`（**隧道通**）；
-  - 但 **TLS 协商死**：schannel `failed to receive handshake` · OpenSSL `unexpected eof while reading` · `HTTP/1.1` · 关闭校验 · `socks5h` —— **五种走法全失败**（`git ls-remote` exit=128）；
-  - 直连：curl `--noproxy` 超时（exit=28）、git 直连 `Empty reply from server`。
-- 处置：`smart_push` 三次尝试 + 完整降级链（schannel → OpenSSL → 直连）跑完仍失败；**门戳已清**（未留半开状态）。**待链路恢复即推**。
-- **硬证（待回填）**：`git ls-remote origin` 应显示 `refs/heads/engine-main = a37ccf0…`、`refs/heads/engine-src = 3b9dc83…`，且含两条 `engine-v0.11.0-kvmem-*` tag；`refs/heads/main = 281aed2…`。
+- **首次受阻（2026-10-08 夜，环境侧，非仓库问题）**：`[EVIDENCE]` 代理 `7890` 在监听且 `curl --proxy` 得 `HTTP/1.1 200 Connection established`（隧道通），但 **TLS 协商死**——schannel `failed to receive handshake` · OpenSSL `unexpected eof while reading` · HTTP/1.1 · 关闭校验 · `socks5h` **五种走法全失败**；直连 `--noproxy` 超时、git 直连 `Empty reply from server`。`smart_push` 三次尝试 + 完整降级链跑完仍失败，**门戳已清**（未留半开）。
+- **链路恢复后推送成功**：
+  - `240fe23..a37ccf0  engine-main -> engine-main`（快进）
+  - `* [new branch]  engine-src -> engine-src`
+  - `* [new tag]  engine-v0.11.0-kvmem-20261003 / -20261008`
+  - `189e9b3..528642f  main -> main`
+- **远端硬证**（`[EVIDENCE]` `git ls-remote --heads --tags origin`，与本地 `rev-parse` 逐字一致）：
+
+| ref | 远端 SHA | 与本地 |
+|---|---|---|
+| `refs/heads/engine-main` | `a37ccf0a942cf9acfb0417ba0feec59c1df758f3` | ✅ 一致 |
+| `refs/heads/engine-src` | `3b9dc837d15b6d7b4ab5f95723762d24bb350efc` | ✅ 一致 |
+| `refs/tags/engine-v0.11.0-kvmem-20261003` | `69499d4171dea80bcf649aee6b83a8efa9e1cd5f` | ✅ 一致 |
+| `refs/tags/engine-v0.11.0-kvmem-20261008` | `2852f6f90b4bd1db074427c76256ccf2b95deedb` | ✅ 一致 |
+| `refs/heads/main` | 推送成功（`189e9b3..528642f`）；**本笔回填提交后 main 再前进一笔，以远端为准** | — |
+
+⇒ **外人 clone 本库即可：`engine-main` 拿"可编出现役引擎"的源码快照；`engine-src` 拿 80 commit 真实演进史（含我方补丁逐条）；两条 tag 作复现锚点。**
 
 ### 15.4 遗留（转后续台账）
 
