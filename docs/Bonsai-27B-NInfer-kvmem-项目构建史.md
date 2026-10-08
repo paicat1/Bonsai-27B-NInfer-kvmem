@@ -614,4 +614,44 @@
 
 ---
 
+## 十五、S6′ 关账（收官，2026-10-08）
+
+> 收敛条件（CODE 第 49/50 轮定）四项 + P0 五项全部满足。
+
+### 15.1 收敛条件
+
+| # | 条件 | 状态 | 证据 |
+|---|---|---|---|
+| 1 | 全图构建零错误 | ✅ | `[1089/1089] Linking … infer-serve.exe`、`BUILD_EXIT=0`（§11.2） |
+| 2 | frontend 单测绿 | ✅ | 53 子测试全过、exit 0、复跑一致（§12.2 / §12.3） |
+| 3 | soak 无 hang 无空正文 | ✅ | A 臂 16 req / C 臂 15 req 全部 done；hang 关键字 = 0（§13.3） |
+| 4 | A4 归属结论落纸 | ✅ | **不可复现**（现场件自身亦未复现，会话级 15 轮）；A/C/D 三臂矩阵与降级说明（§13.4） |
+| 5 | P0 五项（对外可复现化） | ✅ | §14.1–§14.5 |
+
+### 15.2 交付面（本地就绪）
+
+| ref | 本地 tip | 说明 |
+|---|---|---|
+| `main` | `281aed2` | 复现指南 + §十四 + 本轮全部入库件（含 LICENSE / NOTICE / 产物清单 / 必改路径） |
+| `engine-main` | `a37ccf0` | 引擎快照 = 上游 20261008 全树 + 本项目全部补丁 |
+| `engine-src` | `3b9dc83` | 80 commit 真实演进史（含我方 3 个补丁 commit） |
+| `engine-v0.11.0-kvmem-20261003` / `-20261008` | — | 复现锚点 tag |
+
+### 15.3 推送执行与远端硬证
+
+- **2026-10-08 夜：推送受阻（环境侧，非仓库问题）。** `[EVIDENCE]` 探测矩阵：
+  - 代理 `7890` **在监听**，`curl --proxy` 得到 `HTTP/1.1 200 Connection established`（**隧道通**）；
+  - 但 **TLS 协商死**：schannel `failed to receive handshake` · OpenSSL `unexpected eof while reading` · `HTTP/1.1` · 关闭校验 · `socks5h` —— **五种走法全失败**（`git ls-remote` exit=128）；
+  - 直连：curl `--noproxy` 超时（exit=28）、git 直连 `Empty reply from server`。
+- 处置：`smart_push` 三次尝试 + 完整降级链（schannel → OpenSSL → 直连）跑完仍失败；**门戳已清**（未留半开状态）。**待链路恢复即推**。
+- **硬证（待回填）**：`git ls-remote origin` 应显示 `refs/heads/engine-main = a37ccf0…`、`refs/heads/engine-src = 3b9dc83…`，且含两条 `engine-v0.11.0-kvmem-*` tag；`refs/heads/main = 281aed2…`。
+
+### 15.4 遗留（转后续台账）
+
+- ⚠️ **待修**：`start-pq2-dflash-designc.bat` 的引擎路径指向 `.temp\build-120a\apps\`（**中间目录**）——中间目录一清即失效，且与"成品进正式目录"纪律不一致。
+- **P1 待用户点头**：① README 补丁口径"8 处"订正；② 根目录 5 个 `【CODE】/【TELE】` md 归位 `docs/`。
+- **观察项**：G15 / G17 类问题随上游演进跟踪。
+
+---
+
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
