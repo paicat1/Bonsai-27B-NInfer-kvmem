@@ -18,8 +18,8 @@
 
 | 方式 | 说明 |
 |---|---|
-| **`engine-main` 分支（推荐）** | 引擎源码**快照** = 上游 20261008 全树 + 本项目全部补丁。`git clone -b engine-main <repo>` 一条命令拿齐 |
-| **`engine-src` 分支** | **同一源码的完整演进历史**（80 commit：上游 KVMem 环融合 → 我们的逐条补丁提交）。要"看过程/逐步 diff"用这条；**不依赖任何外部仓** |
+| **`engine-main` 分支（推荐）** | 引擎源码**快照** = 上游 20261008 全树 + 本项目全部补丁。`git clone -b engine-main <repo>` 一条命令拿齐；**已含补丁，无需再打** |
+| **`build/patches/`（看过程 / 从上游起步）** | 我们对上游的**全部改动**（3 个补丁 + 用法说明）。要"逐步 diff"或"从上游原始源码复现"用这条 |
 | 本机开发用 | `official-repo\infer-fusion-kvmem\src-tree\fusion-engine-src`（本机 clone，**不入库**） |
 
 ## 三、构建步骤

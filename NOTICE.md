@@ -11,7 +11,7 @@
 | 三元量化工具链 / 转换 / 校验 | 沈三殊（shensanshu）· ModelScope `shensanshu/ninfer-ada-ternary` | 见其发布页 |
 | 模型制品 `Ternary-Bonsai-2-27B-ninfer-v3.ninfer` | 沈三殊（shensanshu） | 见其发布页 |
 
-本仓的引擎源码（`engine-main` / `engine-src` 分支）**原样包含上游源码**，并保留上游 `LICENSE` 与 `NOTICE`。
+本仓的引擎源码（`engine-main` 分支）**原样包含上游源码**，并保留上游 `LICENSE` 与 `NOTICE`。
 
 ## 二、本仓相对上游的修改
 

@@ -634,7 +634,7 @@
 |---|---|---|
 | `main` | `281aed2` | 复现指南 + §十四 + 本轮全部入库件（含 LICENSE / NOTICE / 产物清单 / 必改路径） |
 | `engine-main` | `a37ccf0` | 引擎快照 = 上游 20261008 全树 + 本项目全部补丁 |
-| `engine-src` | `3b9dc83` | 80 commit 真实演进史（含我方 3 个补丁 commit） |
+| `engine-src` | `3b9dc83` | 80 commit 真实演进史（含我方 3 个补丁 commit）——**后已撤销，见 §十六** |
 | `engine-v0.11.0-kvmem-20261003` / `-20261008` | — | 复现锚点 tag |
 
 ### 15.3 推送执行与远端硬证
@@ -655,13 +655,44 @@
 | `refs/tags/engine-v0.11.0-kvmem-20261008` | `2852f6f90b4bd1db074427c76256ccf2b95deedb` | ✅ 一致 |
 | `refs/heads/main` | 推送成功（`189e9b3..528642f`）；**本笔回填提交后 main 再前进一笔，以远端为准** | — |
 
-⇒ **外人 clone 本库即可：`engine-main` 拿"可编出现役引擎"的源码快照；`engine-src` 拿 80 commit 真实演进史（含我方补丁逐条）；两条 tag 作复现锚点。**
+⇒ **外人 clone 本库即可：`engine-main` 拿"可编出现役引擎"的源码快照；两条 tag 作复现锚点。**（原文此处尚含 `engine-src` 全历史分支，**后已撤销**——我方补丁改由 `build/patches/` 提供、**"我们的过程"以 `main` 提交历史为载体**，见 §十六。）
 
 ### 15.4 遗留（转后续台账）
 
-- ⚠️ **待修**：`start-pq2-dflash-designc.bat` 的引擎路径指向 `.temp\build-120a\apps\`（**中间目录**）——中间目录一清即失效，且与"成品进正式目录"纪律不一致。
+- ⚠️ **待修**（**已修 2026-10-08 `f4fc511`，见 §十六**）：`start-pq2-dflash-designc.bat` 的引擎路径指向 `.temp\build-120a\apps\`（**中间目录**）——中间目录一清即失效，且与"成品进正式目录"纪律不一致。
 - **P1 待用户点头**：① README 补丁口径"8 处"订正；② 根目录 5 个 `【CODE】/【TELE】` md 归位 `docs/`。
 - **观察项**：G15 / G17 类问题随上游演进跟踪。
+
+---
+
+## 十六、engine-src 分支撤销 · 补丁导出（2026-10-09）
+
+> 起因：用户核查发现 `engine-src` 分支 80 commit 中 **77 条是上游作者（1314521gjy）历史**、仅 **3 条**是我方补丁——却被 README / 复现指南**定位为“我们的过程”**，构成**呈现层误导**（我方主动误导、CODE 第 52 轮承接失察份额）。用户裁决：**删 `engine-src`（本地+远端）、保留两条 tag、我方 3 补丁导出 `build/patches/`、文档改口径**。
+
+### 16.1 撤销理由（呈现层=误导、技术=冗余）
+- **误导**：77/80 是上游 commit，把它说成“我们的过程”名不副实；读者会误以为那 80 条都是我们做的。
+- **冗余**：我们**真正**的过程 = `main` 提交历史（105 条）+ `docs/…项目构建史.md`（§1–§16）+ `build/patches/`（3 补丁）。
+- **保留 tag 的理由（CODE 第 52 轮补证）**：`[EVIDENCE]` `GenerateBuildId.cmake:41` 用 `git describe --always --tags` 生成版本串，而 `engine-main` 是孤儿快照史（`[EVIDENCE]` `merge-base engine-main 2852f6f` = 空）⇒ 复现者按 `engine-main` 构建时版本串会退化为 `g<短哈希>`；tag 是版本串锚点。
+  - **我方补证（弱化 tag 必然性）**：`[EVIDENCE]` 同文件 L7-9 / L33-34 提供环境变量 `NINFER_BUILD_ID` **覆盖** `git describe` ⇒ 版本串有官方现成解法，**不依赖 tag 血统**。保留 tag 仍作便利锚点。
+
+### 16.2 补丁导出（`build/patches/`）
+- `[EVIDENCE]` `git format-patch 2852f6f..3b9dc83 -o build/patches` ⇒ 3 个补丁（`0001` MSVC 兼容 ×7 · `0002` Design C ×2 · `0003` STANDALONE ×1，合计 10 文件）。
+- **可用性校验**：临时 worktree 检出基准 `2852f6f`，`git apply --check` 三补丁**全过**（无报错）。
+- `build/patches/README.md` 写明：基准（tag `engine-v0.11.0-kvmem-20261008` = `2852f6f`，布局含 `src-tree/fusion-engine-src/` 前缀）、两种用法（读过程 / 从上游起步）、`NINFER_BUILD_ID` 版本串提示。
+
+### 16.3 文档改口径
+- `README.md`：**三分支 → 两分支**（去 `engine-src`）；重排为**开门见山**（姊妹仓关系前置 §一、分支与文档导航 §三）；快速上手手动命令改指现役 `engine/self-built-20261008/`。
+- `docs/复现指南.md`：§二 改“**两步取料**”（`main` 脚本 + `engine-main` 源码）+ 同名文件变脸警示；§六 过程索引改为 `build/patches/` + `main` 历史；§十 designc bat 已修登记。
+- `NOTICE.md` / `build/README.md`：`engine-src` 口径同步移除。
+- **口径基准**：**“我们的过程 = `main` 的提交历史”**（不再以 `engine-src` 为载体）。
+
+### 16.4 远端动作
+- 删除远端分支 `origin/engine-src`（`git push origin --delete engine-src`）；tag 两条**保留**。
+
+### 16.5 教训
+- **“过程可见”必须名副其实**：历史载体里若混入上游 commit，**必须显式标注归属**，否则构成呈现层误导（本次我方主责）。
+- **双载体应降级为单载体**：快照（`engine-main`）+ 补丁（`build/patches/`）已足够；“全历史分支”把上游历史一起搬来，收益（可逐条 diff）不足以抵偿误导风险。
+- **导出的补丁要验可用**：`git apply --check` 是低成本硬证。
 
 ---
 
