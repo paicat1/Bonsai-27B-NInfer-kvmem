@@ -436,4 +436,48 @@
 
 ---
 
+## 十、上游新基线（20261008）研究与对照实测（2026-10-08）
+
+### 10.1 起因与上游本版
+- 上游发布 Release `engine-v0.11.0-kvmem-20261008`（tag tip `2852f6f`）。相对我们现用的 `20261003`：**118 文件 / +3,974 −317**。
+- 修复：**B01**（容量失败分类/不杀进程）· **B02** 503 · **B03** MTP 守卫 · **B21** 启动守卫 · **B06** 并发门 · **B32** 检索预算默认开 · **B30** KV 窗口门统一 · **B29** T2 conv 重复平面（**真数值 bug**）· **B26** 判据收窄 · **B25** 布尔 `=0` 生效 · **S3** OpenAI 路由 per-request `thinking_budget` · **S2** thinking presence penalty · **S6** 复读指标。
+- 件去编译期 `-lineinfo`：120a 件 **1.33 GB → 654 MB**（推理/数值/显存/速度不变）；**日志 schema 27 → 28**；驱动 ≥580；一 exe 一架构（无 PTX 回退）。
+
+### 10.2 新件实测（`engine/upstream-20261008/`，端口 8096）
+- **起服 / 判活 ✅**：`listening`；`capacity | KV 17,920 · pages 280/4,096 · free **5.40 GiB**`（显存余量远大于旧版）。
+- **S3 ✅**：请求体 `thinking_budget` **生效**（`thinking 78/1,024`）；<1024 报 `"thinking_budget must be at least 1024 when set"` —— 与源码 `openai_chat_request.cpp:968` **逐字一致**。
+- **超池**：prompt **18,051 / 28,051**（> 池 17,920）均 **200、引擎不挂起**；走 **`mask hidden` 淘汰**（`hidden` 13 → **168**，其中 `mid_hidden=145` 中段也淘汰）；**未触发 429**（上游自陈 B01"未验"）。
+- **S6 ✅**（`--request-log-jsonl` 的 `result` 内）：`repeat_channel / repeat_tokens / repeat_uniq8 / repeat_dup8 / repeat_max8`；**"空正文"真相 = 输出全在 `repeat_channel="reasoning"`**（推理通道占满）。
+- **B25 ✅**：`NINFER_TERNARY_KVMEM=0` ⇒ `content scorer was EXPLICITLY DISABLED … falls back to the lexical IDF ranking`（并给 `lexical 4/6 vs content 6/6` 效用对比）。
+- 其他：`schema_version=28` ✓；新刷屏 `[ring] budgets` / `mask hidden`（`serve_tee` 需加过滤）；`finish` 新版 = **`output limit`**。
+
+### 10.3 与 CODE 的交叉审核（双边）
+- **CODE 稿补上了我稿缺的"源码层 diff"**：tag `2852f6f` / 118 files / **7 个产品补丁文件上游零改动** / **Design C 落点 L553·L568 同位** / `test_context_store` 上游自修 / S3 源码 `parse_thinking_budget`。
+- **我逐条独立抽验 → 全部成立**（`git -C official-repo… diff --shortstat` = `118 files, 3974 insertions(+), 317 deletions(-)` 逐字一致）。
+- **CODE 纠正我一处 → 我接受**：**B01（池超）≠ A4（池未超下的 prefill 死锁）**；**A4 未被 B01 解决，须新基线复测**。（【TELE】稿已改正。）
+- 我的 **3 条保留意见**（CODE 全部接受）：①"空正文必然发生"降为源码级推断 + 补实测；② A4 复现须**限时限场**（有再触发 hang 风险）；③ 产物清单**加身份标签**。
+- **收敛**：迁移基线 = 20261008 / 产物全留 / Design C 兜底方向 —— **一致**。
+
+### 10.4 对照实测（Design C vs S3）—— **未触到差异**（本节为关键结论）
+- **设计**：同批 4 条 prompt（简单 / 推理 / 强思考[魔方] / 复读）。
+  - **A 臂** = 上游 20261008 件 + per-request `thinking_budget=1024`；
+  - **B 臂** = 自编件（Design C，基于 `20261003`）+ `--default-thinking-budget 1024`。
+- **结果（两臂基本一致）**：
+  | prompt | A 臂（上游+budget） | B 臂（自编/Design C） |
+  |---|---|---|
+  | P1 简单 | `stop` 正文 9 | `stop` 正文 9 |
+  | P2 推理 | `stop` 正文 19 | `stop` 正文 19 |
+  | P3 魔方 | `length` 正文 1539；`thinking 1024/1024, **control 25**` | `length` 正文 1603；`thinking 1024/1024, **control 25**` |
+  | P4 复读 | `length` 正文 1998；`control 25` | `length` 正文 1499；`control 25` |
+- **判定**：本批触到的是 **"budget 用尽"路径（`output_session.cpp` L568，上游原生）**，**不是** Design C 的"**思考区 stop（L553）**"路径。
+  ⇒ **Design C 的独立价值：本次未证实、也未被证伪。**
+- **对 CODE §4.3 的实质回应**：其"场景真实（自建线实测过）"**本次未复现**；"**有 budget 且模型在思考区吐 stop**"这一场景**我方未能构造**。现有实测支持：**"S3 + 设 budget"已能覆盖常见的"思考占满 → 空正文"**（无 budget 时才复现空正文）。
+
+### 10.5 产物处置与本阶段状态
+- **全部保留、一件不删**：`engine/self-built/`（自编，含 Design C → **回退锚 + 对照件**）+ `engine/upstream-20261008/`（新件 1.29 GB）+ `engine/ninfer-serve-120a.exe`（20261003 成品，对照/历史）。
+- **报告**：`docs/reports/` 三份并存 —— `【TELE】上游引擎-…` / `【CODE】上游引擎-…` / `交叉审核-上游引擎-20261008-TELE-…`。
+- **待办**：① 迁移施工单（CODE 稿 §4.4，交我方）**待用户批**；② **Design C 场景需专门构造**（否则按"低成本兜底"保留）；③ 工具适配（`serve_tee` 加 `[ring] budgets` / `mask hidden` 过滤；日志解析认 schema 28 与 `output limit`）。
+
+---
+
 *【TELE 稿】本文档只由 TELE 维护（CODE 的过程记录见其自维护文档）。本文为过程实录，不落批准；所有写操作执行前须用户逐次批准。*
