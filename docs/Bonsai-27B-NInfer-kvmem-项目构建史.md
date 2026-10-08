@@ -667,32 +667,30 @@
 
 ## 十六、engine-src 分支撤销 · 补丁导出（2026-10-09）
 
-> 起因：用户核查发现 `engine-src` 分支 80 commit 中 **77 条是上游作者（1314521gjy）历史**、仅 **3 条**是我方补丁——却被 README / 复现指南**定位为“我们的过程”**，构成**呈现层误导**（我方主动误导、CODE 第 52 轮承接失察份额）。用户裁决：**删 `engine-src`（本地+远端）、保留两条 tag、我方 3 补丁导出 `build/patches/`、文档改口径**。
+> 决策：撤销 `engine-src`（本地 + 远端）、保留两条 tag、我方 3 补丁导出 `build/patches/`、文档改口径。
+> 理由：`engine-src` 为"上游代码演进 + 我方补丁"的混合历史，与本项目过程（启动器 / 脚本 / 文档 / 施工）边界不清。本项目过程改由 **`main` 提交历史 + `build/patches/`（我方补丁逐条）+ 本构建史** 承载，分工单一、边界清晰。
 
-### 16.1 撤销理由（呈现层=误导、技术=冗余）
-- **误导**：77/80 是上游 commit，把它说成“我们的过程”名不副实；读者会误以为那 80 条都是我们做的。
-- **冗余**：我们**真正**的过程 = `main` 提交历史（105 条）+ `docs/…项目构建史.md`（§1–§16）+ `build/patches/`（3 补丁）。
-- **保留 tag 的理由（CODE 第 52 轮补证）**：`[EVIDENCE]` `GenerateBuildId.cmake:41` 用 `git describe --always --tags` 生成版本串，而 `engine-main` 是孤儿快照史（`[EVIDENCE]` `merge-base engine-main 2852f6f` = 空）⇒ 复现者按 `engine-main` 构建时版本串会退化为 `g<短哈希>`；tag 是版本串锚点。
-  - **我方补证（弱化 tag 必然性）**：`[EVIDENCE]` 同文件 L7-9 / L33-34 提供环境变量 `NINFER_BUILD_ID` **覆盖** `git describe` ⇒ 版本串有官方现成解法，**不依赖 tag 血统**。保留 tag 仍作便利锚点。
-
-### 16.2 补丁导出（`build/patches/`）
+### 16.1 补丁导出（`build/patches/`）
 - `[EVIDENCE]` `git format-patch 2852f6f..3b9dc83 -o build/patches` ⇒ 3 个补丁（`0001` MSVC 兼容 ×7 · `0002` Design C ×2 · `0003` STANDALONE ×1，合计 10 文件）。
+- 基准 = 上游 20261008（tag `engine-v0.11.0-kvmem-20261008` = `2852f6f`，布局含 `src-tree/fusion-engine-src/` 前缀）。
 - **可用性校验**：临时 worktree 检出基准 `2852f6f`，`git apply --check` 三补丁**全过**（无报错）。
-- `build/patches/README.md` 写明：基准（tag `engine-v0.11.0-kvmem-20261008` = `2852f6f`，布局含 `src-tree/fusion-engine-src/` 前缀）、两种用法（读过程 / 从上游起步）、`NINFER_BUILD_ID` 版本串提示。
+- `build/patches/README.md` 写明两种用法（读过程 / 从上游起步）+ `NINFER_BUILD_ID` 版本串提示。
+
+### 16.2 保留 tag 的理由
+- `[EVIDENCE]` `GenerateBuildId.cmake:41` 用 `git describe --always --tags` 生成版本串；`engine-main` 为孤儿快照史（`[EVIDENCE]` `merge-base engine-main 2852f6f` = 空）⇒ 复现者按 `engine-main` 构建时版本串会退化为 `g<短哈希>`，tag 作版本串锚点。
+- **补充**：`[EVIDENCE]` 同文件 L7-9 / L33-34 提供环境变量 `NINFER_BUILD_ID` 覆盖 `git describe`，版本串另有官方解法；保留 tag 亦作便利锚点。
 
 ### 16.3 文档改口径
-- `README.md`：**三分支 → 两分支**（去 `engine-src`）；重排为**开门见山**（姊妹仓关系前置 §一、分支与文档导航 §三）；快速上手手动命令改指现役 `engine/self-built-20261008/`。
-- `docs/复现指南.md`：§二 改“**两步取料**”（`main` 脚本 + `engine-main` 源码）+ 同名文件变脸警示；§六 过程索引改为 `build/patches/` + `main` 历史；§十 designc bat 已修登记。
+- `README.md`：三分支 → 两分支；重排为开门见山（姊妹仓关系 §一、分支与文档导航 §三）；快速上手手动命令改指现役 `engine/self-built-20261008/`。
+- `docs/复现指南.md`：§二 改"两步取料"（`main` 脚本 + `engine-main` 源码）+ 同名文件警示；§六 过程索引改指 `build/patches/` + `main` 历史；§十 designc bat 已修登记。
 - `NOTICE.md` / `build/README.md`：`engine-src` 口径同步移除。
-- **口径基准**：**“我们的过程 = `main` 的提交历史”**（不再以 `engine-src` 为载体）。
+- **口径基准**：本项目过程以 `main` 提交历史 + `build/patches/` 为载体。
 
 ### 16.4 远端动作
-- 删除远端分支 `origin/engine-src`（`git push origin --delete engine-src`）；tag 两条**保留**。
+- 删除远端分支 `engine-src`；tag 两条保留。
 
-### 16.5 教训
-- **“过程可见”必须名副其实**：历史载体里若混入上游 commit，**必须显式标注归属**，否则构成呈现层误导（本次我方主责）。
-- **双载体应降级为单载体**：快照（`engine-main`）+ 补丁（`build/patches/`）已足够；“全历史分支”把上游历史一起搬来，收益（可逐条 diff）不足以抵偿误导风险。
-- **导出的补丁要验可用**：`git apply --check` 是低成本硬证。
+### 16.5 小结
+- 载体收敛为"快照（`engine-main`）+ 补丁（`build/patches/`）+ 提交史（`main`）"，职责单一、边界清晰；导出的补丁以 `git apply --check` 验可用。
 
 ---
 
