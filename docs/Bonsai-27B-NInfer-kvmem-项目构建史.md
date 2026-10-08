@@ -533,8 +533,41 @@
 - **直接覆盖我方 Design C**：`a25012b` 改 `src/models/qwen3_5/frontend/output_session.cpp` + 本测试断言（thinking 阶段 stop 强制进 answer）⇒ 单测绿即 **Design C 与新基线 thinking 语义一致**；含 `test_thinking_budget_control` / `test_reasoning_split` / `test_reasoning_close_requires_boundary` / `test_reasoning_close_resolves_at_terminal` 等边界断言。
 
 ### 12.4 待续
-- **soak + A4 双基线 A/B**（用户在场 / 可随时停 / 限时）：A4 = 池**未超**下的 prefill 死锁，须旧件（`engine/self-built/ninfer-serve.exe`）与新件同参（req#30 类负载：10 msgs / 32 tools / thinking medium / budget 16000）对照，判定 归属=上游遗留/新版引入/消失。
+- **soak + A4 双基线 A/B**（用户在场 / 可随时停 / 限时）：A4 = 池**未超**下的 prefill 死锁，须旧件（`engine/self-built/ninfer-serve.exe`）与新件同参（req#30 类负载：10 msgs / 32 tools / thinking medium / budget 16000）对照，判定 归属=上游遗留/新版引入/消失。（⚠️ 此处"旧件"指定有误，**已于 §13.1 更正为官方 20261003 现场件**。）
 - 收尾：产物清单**身份标签** → `engine-main` 快照同步 → 构建史收口 → 双分支推送。
+
+---
+
+## 十三、迁移施工 · 阶段二之二：A4 双基线复测 + 实流 soak（2026-10-08）
+
+> 承接 §12.4；S6 验收口径（"单测绿 + 实流 soak"）的**后半**。
+
+### 13.1 A4 现场取证（从日志取真实参数，非记忆）
+- `[EVIDENCE]` `logs/serve_20261007_163541.log` CMD 行：`engine\ninfer-serve-120a.exe … --max-context 163840 --kv-capacity 163840 --kv-dtype k8v4 --host-kv-mib 16384 … --default-reasoning-effort medium --default-thinking-budget 16000 … --preserve-thinking … --kv-lease-growth --recover-invariant-failures` ⇒ **现场件＝官方 20261003 件**（非自编件；CODE 第 45 轮已自纠）。
+- `[EVIDENCE]` 触发请求：`16:47:19.492 req#30 started | openai-chat stream | 10 messages | max output 65,536 | thinking medium, budget 16,000 | tools 32 | preserve thinking`，**从未出现 done**；日志冻结于 `16:47:37`（末行 `kvmem_score … chunk_abs=34816`）。
+- 条件：池**远未超**（prompt ~35K ≪ 163,840）；`capacity | pages 2,560/2,560 | free 836.7 MiB`（**显存临界**）。
+
+### 13.2 复测方法（"同参"是逐词级的）
+- 三份启动 BAT（`build/a4-arm-A/C/D.bat`）参数与 A4 现场 CMD **逐词比对 `EQUAL: True`**（43 tokens 全同），仅**端口与引擎路径**不同。
+- 负载客户端 `build/a4_load.py`：32 tools / 10 messages / **`max_tokens=65536` 逐请求覆盖**（服务端默认 32768，不覆盖则"同参"不成立）。
+- 条件对表：A4 现场 `free 836.7 MiB` ↔ 本轮 **A=845.6 MiB · C=921.0 MiB** ⇒ 同级。
+
+### 13.3 结果
+| 臂 | 件 | 负载 | hang | 空正文 |
+|---|---|---|---|---|
+| **A** | 官方 20261003（**现场件**） | 单请求 + 会话 15 轮 | **无** | 无 |
+| **C** | 自建 20261008 + 3 补丁（交付件） | 会话 15 轮（soak） | **无** | 无 |
+| D | 官方 20261008 | 未跑（A 未挂 ⇒ 归属矩阵失效，按方案 2→4 跳过） | — | — |
+
+- A：`[EVIDENCE]` `req#1..#16` **全部 `done`**（`stop token`）；末几轮 `cache 38,504 (100.0%, response replay)` ⇒ 会话确实走 KV ring 跨轮复用。
+- C：`[EVIDENCE]` `started=15 done=15`；`build engine-v0.11.0-kvmem-20261008-3-g3b9dc83`；每轮 `thinking 16,000/16,000, control 25`（思考烧满后 **control 强制进 answer**，正文正常产出）。
+- 两臂 hang 关键字扫描（`panic|abort|assert|exception|OOM|GATED_DELTA`）= **0**。
+
+### 13.4 结论与如实披露
+- **A4 不可复现**：在 A4 **同级显存条件**下，**连现场件自身（臂 A）**单请求与会话 15 轮均未 hang ⇒ 该事件属**低频偶发**，req#30 类负载无法确定性复现 ⇒ **归属（上游遗留 / 新版引入）无法判定**；可确定：**新基线 C 在同条件下无 hang、无空正文、KV ring 复用正常**。
+- ⚠️ **测量口径缺陷（我方自查并更正）**：`a4_load.py` 初版只统计 `content` 通道，**工具调用轮次被计为 `chars=0`（假"空正文"）**；引擎侧 `req#N done | tool calls 1` 证明实为**工具调用响应**。已修：客户端加计 `tool_calls`，分列 `content_chars / tool_calls`。
+- **副产品（UX 级）**：思考饱和时客户端前 ~72s **0 字符**（输出全在 reasoning 通道），第 77s 才吐正文 ⇒ 用户观感等同"卡住"。
+- 现场日志：`logs/a4_armA.log` · `logs/a4_armC.log`；请求证据：`logs/a4_requests/`（均 gitignored）。`build/a4-arm-D.bat` 保留备查。
 
 ---
 
